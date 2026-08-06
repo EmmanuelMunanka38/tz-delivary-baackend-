@@ -13,7 +13,7 @@ initializeSocket(server);
 // Verify DB connection and start server
 const start = async () => {
   try {
-    await prisma.$connect();
+    await prisma.$queryRaw`SELECT 1`;
     console.log('PostgreSQL connected');
 
     server.listen(config.port, () => {
