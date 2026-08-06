@@ -21,6 +21,7 @@ import userRoutes from './routes/users';
 import uploadRoutes from './routes/upload';
 import promotionRoutes from './routes/promotions';
 import paymentRoutes, { clickPesaWebhookRouter } from './routes/payment';
+import contactRoutes from './routes/contact';
 
 const app = express();
 
@@ -113,6 +114,7 @@ app.use('/api/restaurant-owner', restaurantOwnerRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/contact', contactRoutes);
 
 // 404 handler
 app.use((_req, res) => {

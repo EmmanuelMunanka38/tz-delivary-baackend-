@@ -1,5 +1,53 @@
 import axios from 'axios';
+import nodemailer from 'nodemailer';
 import config from '../config';
+
+const CONTACT_RECIPIENT = config.email.from || 'foodpikifast@gmail.com';
+
+export type ContactPayload = {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+};
+
+async function createTransporter() {
+  if (config.email.mode === 'self-hosted') {
+    return nodemailer.createTransport({
+      host: 'localhost',
+      port: config.email.selfHostedPort,
+      ignoreTLS: true,
+    });
+  }
+
+  if (config.email.user && config.email.pass) {
+    return nodemailer.createTransport({
+      host: config.email.host,
+      port: config.email.port,
+      secure: config.email.port === 465,
+      auth: {
+        user: config.email.user,
+        pass: config.email.pass,
+      },
+    });
+  }
+
+  if (config.nodeEnv === 'production') {
+    throw new Error('EMAIL_USER and EMAIL_PASS must be configured in production');
+  }
+
+  const testAccount = await nodemailer.createTestAccount();
+  console.log(`[EMAIL] Dev mode: using Ethereal test account: ${testAccount.user}`);
+  return nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
+}
 
 export const sendOtpEmail = async (to: string, otp: string): Promise<void> => {
   const html = buildOtpHtml(otp);
@@ -41,43 +89,7 @@ export const sendOtpEmail = async (to: string, otp: string): Promise<void> => {
     }
   }
 
-  const nodemailer = await import('nodemailer');
-
-  let transporter;
-
-  if (config.email.mode === 'self-hosted') {
-    transporter = nodemailer.createTransport({
-      host: 'localhost',
-      port: config.email.selfHostedPort,
-      ignoreTLS: true,
-    });
-  } else if (config.email.user && config.email.pass) {
-    transporter = nodemailer.createTransport({
-      host: config.email.host,
-      port: config.email.port,
-      secure: config.email.port === 465,
-      auth: {
-        user: config.email.user,
-        pass: config.email.pass,
-      },
-    });
-  } else {
-    if (config.nodeEnv === 'production') {
-      throw new Error('EMAIL_USER and EMAIL_PASS must be configured in production');
-    }
-    const testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-    console.log(`[EMAIL] Dev mode: using Ethereal test account: ${testAccount.user}`);
-  }
-
+  const transporter = await createTransporter();
   const info = await transporter.sendMail({
     from: `"Piki Food" <${config.email.from}>`,
     to,
@@ -87,6 +99,92 @@ export const sendOtpEmail = async (to: string, otp: string): Promise<void> => {
 
   console.log(`[EMAIL] OTP sent to ${to} (messageId: ${info.messageId})`);
 };
+
+export const sendContactEmail = async (payload: ContactPayload): Promise<void> => {
+  const html = buildContactHtml(payload);
+
+  if (config.email.mode === 'brevo' && config.email.brevoApiKey) {
+    try {
+      const { data } = await axios.post(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          sender: {
+            name: 'Piki Food',
+            email: config.email.from,
+          },
+          to: [{ email: CONTACT_RECIPIENT }],
+          replyTo: { email: payload.email, name: payload.name },
+          subject: `[Contact] ${payload.subject}`,
+          htmlContent: html,
+        },
+        {
+          headers: {
+            'api-key': config.email.brevoApiKey,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          timeout: 15000,
+        },
+      );
+      console.log(`[EMAIL] Contact message sent to ${CONTACT_RECIPIENT} (id: ${data.messageId})`);
+      return;
+    } catch (err: any) {
+      console.error('[EMAIL] Brevo contact send failed:', err?.response?.data || err?.message || err);
+      if (!config.email.user && !config.email.pass) {
+        throw err;
+      }
+    }
+  }
+
+  const transporter = await createTransporter();
+  const info = await transporter.sendMail({
+    from: `"Piki Food" <${config.email.from}>`,
+    to: CONTACT_RECIPIENT,
+    replyTo: `"${payload.name}" <${payload.email}>`,
+    subject: `[Contact] ${payload.subject}`,
+    html,
+  });
+
+  console.log(`[EMAIL] Contact message sent to ${CONTACT_RECIPIENT} (messageId: ${info.messageId})`);
+};
+
+function buildContactHtml({ name, email, subject, message }: ContactPayload): string {
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;">
+
+  <div style="margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #e2e2e2;">
+    <span style="font-size: 24px; font-weight: 700; color: #16A34A; letter-spacing: -0.5px;">Piki Food</span>
+  </div>
+
+  <h1 style="font-size: 22px; font-weight: 700; color: #000000; margin: 0 0 24px 0; line-height: 1.2;">
+    New contact message
+  </h1>
+
+  <div style="background-color: #f9fafb; border-left: 4px solid #16A34A; padding: 20px 24px; margin: 0 0 28px 0;">
+    <p style="margin: 0 0 6px 0; font-size: 14px; color: #555555;"><strong>Name:</strong> ${escapeHtml(name)}</p>
+    <p style="margin: 0 0 6px 0; font-size: 14px; color: #555555;"><strong>Email:</strong> ${escapeHtml(email)}</p>
+    <p style="margin: 0; font-size: 14px; color: #555555;"><strong>Subject:</strong> ${escapeHtml(subject)}</p>
+  </div>
+
+  <p style="font-size: 16px; line-height: 24px; color: #333333; margin: 0 0 32px 0; white-space: pre-wrap;">${escapeHtml(message)}</p>
+
+  <hr style="border: none; border-top: 1px solid #e2e2e2; margin: 0 0 24px 0;" />
+
+  <div style="font-size: 12px; line-height: 18px; color: #999999;">
+    <p style="margin: 0;">Sent from the Piki Food contact page.</p>
+  </div>
+</div>
+  `;
+}
+
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function buildOtpHtml(otp: string): string {
   return `
