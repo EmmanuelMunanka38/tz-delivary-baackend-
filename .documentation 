@@ -1,0 +1,15 @@
+THE NEXT PHASES TO DO :
+=> Payment intergration on the Backend 
+=> Notification service sms and email implementation 
+=> Adding subscriptions on the product 
+    * In three subs but we need to actual make the 
+    product very well in a way that one can be willing 
+    to pay at any cost.
+
+AREAS OF MODIFICATION => CHANGING THE ARCHETECTURE TO MICROSERVICES :
+Why : -> easy feature implemetaions 
+      -> making all the services to not depende to each other 
+      and remain talking to each other via APIs ( cached REST APIs)
+
+=> Tracking Service : building entirely in Golang , Rust or C++ and notletting the UI 
+tp handle api calls             

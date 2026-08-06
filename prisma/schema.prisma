@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  customer
+  restaurant_owner
+  driver
+  admin
+}
+
+enum OrderStatus {
+  pending
+  restaurant_accepted
+  preparing
+  ready_for_pickup
+  driver_assigned
+  picked_up
+  on_the_way
+  arrived
+  delivered
+  cancelled
+}
+
+enum PaymentMethod {
+  mpesa
+  tigo_pesa
+  airtel_money
+  mixx_by_yas
+  halopesa
+  card
+  cash
+}
+
+enum DeliveryRequestStatus {
+  available
+  accepted
+  completed
+  cancelled
+}
+
+model User {
+  id           String    @id @default(uuid())
+  phone        String?   @unique
+  name         String    @default("")
+  email        String?   @unique
+  avatar       String?
+  role         UserRole  @default(customer)
+  otpCode      String?
+  otpExpiresAt DateTime?
+  fcmToken     String?
+  refreshToken String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  ownedRestaurants Restaurant[]
+  orders           Order[]
+  riderOrders      Order[]          @relation("RiderOrders")
+  cart             Cart?
+  deliveryRequests DeliveryRequest[]
+  notifications    Notification[]
+
+  @@index([phone])
+  @@index([email])
+  @@index([role])
+}
+
+model Category {
+  id    String @id @default(uuid())
+  name  String @unique
+  icon  String
+  image String
+}
+
+model Restaurant {
+  id           String   @id @default(uuid())
+  name         String
+  image        String
+  logo         String?
+  cuisine      String
+  rating       Float    @default(0)
+  ratingCount  Int      @default(0)
+  deliveryFee  Float
+  deliveryTime String
+  distance     String
+  address      String
+  isOpen         Boolean  @default(true)
+  isApproved     Boolean  @default(true)
+  openingHours   String?
+  closingHours   String?
+  customMessage  String?
+  nextOpenTime   String?
+  categories     Json     @default("[]")
+  latitude       Float?
+  longitude      Float?
+  ownerId        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  owner      User         @relation(fields: [ownerId], references: [id])
+  orders     Order[]
+  promotions Promotion[]
+
+  @@index([ownerId])
+  @@index([cuisine])
+  @@index([isOpen])
+}
+
+model Promotion {
+  id           String   @id @default(uuid())
+  title        String
+  description  String
+  code         String?
+  image        String?
+  ctaLabel     String   @default("Order Now")
+  isActive     Boolean  @default(true)
+  restaurantId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
+  @@index([isActive])
+}
+
+model MenuItem {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  name          String
+  description   String
+  price         Float
+  image         String?
+  category      String
+  isAvailable   Boolean  @default(true)
+  isPopular     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@index([category])
+  @@index([isAvailable])
+}
+
+model Cart {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  restaurantId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User  @relation(fields: [userId], references: [id])
+  items      CartItem[]
+
+  @@index([userId])
+}
+
+model CartItem {
+  id         String @id @default(uuid())
+  cartId     String
+  menuItemId String
+  quantity   Int    @default(1)
+  price      Float
+  name       String
+
+  cart Cart @relation(fields: [cartId], references: [id])
+
+  @@index([cartId])
+  @@index([menuItemId])
+}
+
+model Order {
+  id                String        @id @default(uuid())
+  orderNumber       String        @unique
+  userId            String
+  restaurantId      String
+  subtotal          Float
+  deliveryFee       Float
+  serviceFee        Float
+  total             Float
+  status            OrderStatus   @default(pending)
+  paymentMethod     PaymentMethod
+  deliveryAddress   Json
+  riderId           String?
+  estimatedDelivery DateTime
+  actualDelivery    DateTime?
+  paymentIntentId   String?
+  createdAt         DateTime      @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  rider      User?      @relation("RiderOrders", fields: [riderId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  items      OrderItem[]
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([restaurantId])
+  @@index([riderId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id                 String  @id @default(uuid())
+  orderId            String
+  menuItemId         String
+  name               String
+  price              Float
+  quantity           Int
+  image              String?
+  specialInstructions String?
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+model DeliveryRequest {
+  id          String                @id @default(uuid())
+  orderId     String                @unique
+  restaurant  Json
+  customer    Json
+  pickup      String
+  dropoff     String
+  distance    Float
+  deliveryFee Float
+  items       String[]
+  timeLeft    Int
+  status      DeliveryRequestStatus @default(available)
+  driverId    String?
+  createdAt   DateTime              @default(now())
+
+  driver User? @relation(fields: [driverId], references: [id])
+
+  @@index([status])
+  @@index([driverId])
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String        @unique
+  stripePaymentId String?
+  amount          Float
+  currency        String        @default("TZS")
+  status          String        @default("pending")
+  method          PaymentMethod
+  createdAt       DateTime      @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([read])
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  orderReference  String            @unique
+  orderId         String?
+  clickPesaId     String?
+  amount          Float
+  phoneNumber     String
+  status          TransactionStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  order Order? @relation(fields: [orderId], references: [id])
+}
