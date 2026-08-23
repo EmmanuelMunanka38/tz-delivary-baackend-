@@ -64,6 +64,7 @@ model User {
   cart             Cart?
   deliveryRequests DeliveryRequest[]
   notifications    Notification[]
+  subscriptions    UserSubscription[]
 
   @@index([phone])
   @@index([email])
@@ -285,4 +286,41 @@ model Transaction {
   updatedAt       DateTime          @updatedAt
 
   order Order? @relation(fields: [orderId], references: [id])
+}
+
+enum SubscriptionStatus {
+  PAID
+  UNPAID 
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id                  String             @id @default(uuid())
+  name                String             // e.g., "Eats Pass Monthly"
+  ClickpesaPriceId       String             @unique
+  priceCents          Int
+  billingInterval     String             // "month" or "year"
+  minOrderAmountCents Int                @default(1500) // $15.00 min threshold
+  freeDelivery        Boolean            @default(true)
+  discountPercentage  Decimal            @default(0.00) @db.Decimal(5, 2)
+  subscriptions       UserSubscription[]
+  createdAt           DateTime           @default(now())
+}
+
+model UserSubscription {
+  id                   String             @id @default(uuid())
+  userId               String
+  planId               String
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([userId, status])
 }
