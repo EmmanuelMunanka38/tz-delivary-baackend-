@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import prisma from '@/db/prisma';
 import auth, { AuthRequest } from '@/middleware/auth';
 import role from '@/middleware/role';
 import validate from '@/middleware/validate';
