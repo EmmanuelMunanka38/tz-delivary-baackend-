@@ -18,6 +18,16 @@ const createPlanSchema = z.object({
   minOrderAmountCents: z.number().int().nonnegative().optional(),
   freeDelivery: z.boolean().optional(),
   discountPercentage: z.number().min(0).max(100).optional(),
+  isTrialPlan: z.boolean().optional(),
+  trialDays: z.number().int().nonnegative().optional(),
+  maxMenuItems: z.number().int().positive().optional(),
+  hasAnalytics: z.boolean().optional(),
+  hasOnlinePayments: z.boolean().optional(),
+  priorityPlacement: z.boolean().optional(),
+  featuredInPopular: z.boolean().optional(),
+  customDesign: z.boolean().optional(),
+  multiBranch: z.boolean().optional(),
+  dedicatedManager: z.boolean().optional(),
 });
 
 const updatePlanSchema = z.object({
@@ -28,6 +38,16 @@ const updatePlanSchema = z.object({
   minOrderAmountCents: z.number().int().nonnegative().optional(),
   freeDelivery: z.boolean().optional(),
   discountPercentage: z.number().min(0).max(100).optional(),
+  isTrialPlan: z.boolean().optional(),
+  trialDays: z.number().int().nonnegative().optional(),
+  maxMenuItems: z.number().int().positive().optional(),
+  hasAnalytics: z.boolean().optional(),
+  hasOnlinePayments: z.boolean().optional(),
+  priorityPlacement: z.boolean().optional(),
+  featuredInPopular: z.boolean().optional(),
+  customDesign: z.boolean().optional(),
+  multiBranch: z.boolean().optional(),
+  dedicatedManager: z.boolean().optional(),
 });
 
 const createSubscriptionSchema = z.object({
@@ -116,6 +136,29 @@ router.get('/my/active', auth, async (req: AuthRequest, res: Response): Promise<
   }
 });
 
+router.post('/start-trial', auth, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const subscription = await subscriptionService.startTrial(req.userId!);
+    res.status(201).json({ success: true, message: 'Trial started', data: subscription });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message || 'Failed to start trial' });
+  }
+});
+
+router.post(
+  '/upgrade',
+  auth,
+  validate(createSubscriptionSchema),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const result = await subscriptionService.upgradeFromTrial(req.userId!, req.body);
+      res.status(201).json({ success: true, message: 'Upgrade initiated', data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Failed to upgrade' });
+    }
+  },
+);
+
 router.post(
   '/subscribe',
   auth,
@@ -143,6 +186,16 @@ router.post(
     }
   },
 );
+
+router.get('/check-limit/:feature', auth, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const feature = req.params.feature as string;
+    const result = await subscriptionService.checkPlanLimit(req.userId!, feature);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to check plan limit' });
+  }
+});
 
 export const clickPesaSubscriptionWebhookRouter = Router();
 clickPesaSubscriptionWebhookRouter.post(
