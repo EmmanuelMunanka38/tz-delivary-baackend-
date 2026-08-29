@@ -45,18 +45,20 @@ enum DeliveryRequestStatus {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  phone        String?   @unique
-  name         String    @default("")
-  email        String?   @unique
-  avatar       String?
-  role         UserRole  @default(customer)
-  otpCode      String?
-  otpExpiresAt DateTime?
-  fcmToken     String?
-  refreshToken String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  phone            String?   @unique
+  name             String    @default("")
+  email            String?   @unique
+  avatar           String?
+  role             UserRole  @default(customer)
+  otpCode          String?
+  otpExpiresAt     DateTime?
+  fcmToken         String?
+  refreshToken     String?
+  clickPesaPhone   String?
+  hasUsedFreeTrial Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   ownedRestaurants Restaurant[]
   orders           Order[]
@@ -64,6 +66,7 @@ model User {
   cart             Cart?
   deliveryRequests DeliveryRequest[]
   notifications    Notification[]
+  subscriptions    UserSubscription[]
 
   @@index([phone])
   @@index([email])
@@ -285,4 +288,54 @@ model Transaction {
   updatedAt       DateTime          @updatedAt
 
   order Order? @relation(fields: [orderId], references: [id])
+}
+
+enum SubscriptionStatus {
+  PAID
+  UNPAID 
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id                  String             @id @default(uuid())
+  name                String
+  ClickpesaPriceId    String             @unique
+  priceCents          Int
+  billingInterval     String
+  minOrderAmountCents Int                @default(1500)
+  freeDelivery        Boolean            @default(true)
+  discountPercentage  Decimal            @default(0.00) @db.Decimal(5, 2)
+  isTrialPlan         Boolean            @default(false)
+  trialDays           Int                @default(0)
+  maxMenuItems        Int                @default(20)
+  hasAnalytics        Boolean            @default(false)
+  hasOnlinePayments   Boolean            @default(false)
+  priorityPlacement   Boolean            @default(false)
+  featuredInPopular   Boolean            @default(false)
+  customDesign        Boolean            @default(false)
+  multiBranch         Boolean            @default(false)
+  dedicatedManager    Boolean            @default(false)
+  subscriptions       UserSubscription[]
+  createdAt           DateTime           @default(now())
+}
+
+model UserSubscription {
+  id                   String             @id @default(uuid())
+  userId               String
+  planId               String
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  isTrial              Boolean            @default(false)
+  trialEndsAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([userId, status])
+  @@index([trialEndsAt])
 }

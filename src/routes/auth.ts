@@ -40,6 +40,7 @@ const updateProfileSchema = z.object({
   email: z.string().email().optional(),
   avatar: z.string().optional(),
   fcmToken: z.string().optional(),
+  clickPesaPhone: z.string().min(10).max(15).optional(),
 });
 
 const socialLoginSchema = z.object({
@@ -124,6 +125,8 @@ router.get('/profile', auth, async (req: AuthRequest, res: Response): Promise<vo
         email: true,
         role: true,
         fcmToken: true,
+        clickPesaPhone: true,
+        hasUsedFreeTrial: true,
         createdAt: true,
       },
     });
@@ -145,6 +148,7 @@ router.put('/profile', auth, validate(updateProfileSchema), async (req: AuthRequ
     if (req.body.email !== undefined) data.email = req.body.email;
     if (req.body.avatar !== undefined) data.avatar = req.body.avatar;
     if (req.body.fcmToken !== undefined) data.fcmToken = req.body.fcmToken;
+    if (req.body.clickPesaPhone !== undefined) data.clickPesaPhone = req.body.clickPesaPhone;
 
     const user = await prisma.user.update({
       where: { id: req.userId },
@@ -157,6 +161,8 @@ router.put('/profile', auth, validate(updateProfileSchema), async (req: AuthRequ
         email: true,
         role: true,
         fcmToken: true,
+        clickPesaPhone: true,
+        hasUsedFreeTrial: true,
         createdAt: true,
       },
     });

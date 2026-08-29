@@ -12,7 +12,7 @@ function canonicalize(obj: any): any {
         acc[key] = canonicalize(obj[key]);
         return acc;
       },
-      {} as Record<string, any>,
+      {} as Record<string, any>, 
     );
 }
 
