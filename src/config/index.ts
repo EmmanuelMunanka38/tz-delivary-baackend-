@@ -105,6 +105,16 @@ const config = {
   fcm: {
     serverKey: process.env.FCM_SERVER_KEY || '',
   },
+
+  whatsapp: {
+    apiVersion: process.env.WHATSAPP_API_VERSION || 'v19.0',
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+    businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
+    webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'piki_whatsapp_verify_2024',
+    webhookSecret: process.env.WHATSAPP_WEBHOOK_SECRET || '',
+  },
+
   test: {
     nodeEnv: (process.env.NODE_ENV = 'test'),
   },
