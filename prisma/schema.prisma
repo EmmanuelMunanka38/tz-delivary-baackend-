@@ -45,20 +45,22 @@ enum DeliveryRequestStatus {
 }
 
 model User {
-  id               String    @id @default(uuid())
-  phone            String?   @unique
-  name             String    @default("")
-  email            String?   @unique
-  avatar           String?
-  role             UserRole  @default(customer)
-  otpCode          String?
-  otpExpiresAt     DateTime?
-  fcmToken         String?
-  refreshToken     String?
-  clickPesaPhone   String?
-  hasUsedFreeTrial Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  phone                String?   @unique
+  name                 String    @default("")
+  email                String?   @unique
+  avatar               String?
+  role                 UserRole  @default(customer)
+  otpCode              String?
+  otpExpiresAt         DateTime?
+  fcmToken             String?
+  refreshToken         String?
+  clickPesaPhone       String?
+  hasUsedFreeTrial     Boolean   @default(false)
+  whatsappPhoneNumber  String?   @unique
+  whatsappOptIn        Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   ownedRestaurants Restaurant[]
   orders           Order[]
@@ -67,6 +69,7 @@ model User {
   deliveryRequests DeliveryRequest[]
   notifications    Notification[]
   subscriptions    UserSubscription[]
+  whatsappSessions WhatsAppSession[]
 
   @@index([phone])
   @@index([email])
@@ -338,4 +341,49 @@ model UserSubscription {
 
   @@index([userId, status])
   @@index([trialEndsAt])
+}
+
+enum WhatsAppConversationState {
+  MAIN_MENU
+  BROWSE_RESTAURANTS
+  VIEW_MENU
+  VIEW_CART
+  CHECKOUT_ADDRESS
+  CHECKOUT_PAYMENT
+  ORDER_CONFIRMATION
+  ORDER_TRACKING
+  RESERVATION
+}
+
+model WhatsAppSession {
+  id                String                  @id @default(uuid())
+  userId            String
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber       String                  @unique
+  conversationState WhatsAppConversationState @default(MAIN_MENU)
+  stateData         Json                    @default("{}")
+  lastMessageAt     DateTime                @default(now())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  messages WhatsAppMessage[]
+
+  @@index([phoneNumber])
+  @@index([userId])
+}
+
+model WhatsAppMessage {
+  id                String          @id @default(uuid())
+  whatsappMessageId String          @unique
+  sessionId         String
+  session           WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction         String
+  messageType       String
+  content           Json
+  status            String?
+  statusTimestamp   DateTime?
+  createdAt         DateTime        @default(now())
+
+  @@index([sessionId])
+  @@index([whatsappMessageId])
 }
