@@ -26,6 +26,34 @@ export async function whatsappFlowEncryption(
       }
     }
 
+    const isEncrypted = req.body.encrypted_aes_key && req.body.encrypted_flow_data;
+
+    if (!isEncrypted) {
+      console.log('[WhatsApp Flow] Unencrypted request detected');
+
+      if (req.body.action === 'ping') {
+        res.json({ data: { status: 'active' } });
+        return;
+      }
+
+      if (req.body.action === 'error') {
+        console.error('[WhatsApp Flow Error]', req.body.data);
+        res.json({ data: { acknowledged: true } });
+        return;
+      }
+
+      req.whatsappFlow = {
+        decryptedBody: req.body,
+        aesKeyBuffer: Buffer.alloc(0),
+        initialVectorBuffer: Buffer.alloc(0),
+      };
+
+      req.body = req.body.data || {};
+      next();
+      return;
+    }
+
+    console.log('[WhatsApp Flow] Encrypted request detected, decrypting...');
     const { decryptedBody, aesKeyBuffer, initialVectorBuffer } = decryptRequest(req.body);
 
     if (decryptedBody.action === 'ping') {
@@ -59,7 +87,7 @@ export async function whatsappFlowEncryption(
 }
 
 export function sendEncryptedResponse(req: WhatsAppFlowRequest, res: Response, responseData: any): void {
-  if (!req.whatsappFlow) {
+  if (!req.whatsappFlow || req.whatsappFlow.aesKeyBuffer.length === 0) {
     res.json(responseData);
     return;
   }
