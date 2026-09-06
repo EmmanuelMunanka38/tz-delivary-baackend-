@@ -24,6 +24,7 @@ import paymentRoutes, { clickPesaWebhookRouter } from './routes/payment';
 import subscriptionRoutes, { clickPesaSubscriptionWebhookRouter } from './routes/subscriptions';
 import contactRoutes from './routes/contact';
 import whatsappRoutes from './routes/whatsapp';
+import whatsappFlowRoutes from './routes/whatsapp-flow';
 
 const app = express();
 
@@ -120,6 +121,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/whatsapp/flow', whatsappFlowRoutes);
 
 // 404 handler
 app.use((_req, res) => {
