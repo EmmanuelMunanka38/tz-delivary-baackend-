@@ -6,3 +6,5 @@ uploads/
 .DS_Store
 coverage/
 .documentation
+whatsapp-flows/
+key/*.pem

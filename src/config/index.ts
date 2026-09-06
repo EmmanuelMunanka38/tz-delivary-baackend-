@@ -111,8 +111,13 @@ const config = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
+    businessApiKey: process.env.WHATSAPP_BUSINESS_API_KEY || '',
     webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'piki_whatsapp_verify_2024',
     webhookSecret: process.env.WHATSAPP_WEBHOOK_SECRET || '',
+    privateKey: process.env.WHATSAPP_PRIVATE_KEY || '',
+    privateKeyPath: process.env.WHATSAPP_PRIVATE_KEY_PATH || './key/private.pem',
+    privateKeyPassphrase: process.env.WHATSAPP_PRIVATE_KEY_PASSPHRASE || '',
+    appSecret: process.env.WHATSAPP_APP_SECRET || '',
   },
 
   test: {
