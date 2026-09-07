@@ -32,13 +32,17 @@ export async function whatsappFlowEncryption(
       console.log('[WhatsApp Flow] Unencrypted request detected');
 
       if (req.body.action === 'ping') {
-        res.json({ data: { status: 'active' } });
+        const response = { data: { status: 'active' } };
+        const base64Response = Buffer.from(JSON.stringify(response)).toString('base64');
+        res.type('text/plain').send(base64Response);
         return;
       }
 
       if (req.body.action === 'error') {
         console.error('[WhatsApp Flow Error]', req.body.data);
-        res.json({ data: { acknowledged: true } });
+        const response = { data: { acknowledged: true } };
+        const base64Response = Buffer.from(JSON.stringify(response)).toString('base64');
+        res.type('text/plain').send(base64Response);
         return;
       }
 
@@ -88,7 +92,8 @@ export async function whatsappFlowEncryption(
 
 export function sendEncryptedResponse(req: WhatsAppFlowRequest, res: Response, responseData: any): void {
   if (!req.whatsappFlow || req.whatsappFlow.aesKeyBuffer.length === 0) {
-    res.json(responseData);
+    const base64Response = Buffer.from(JSON.stringify(responseData)).toString('base64');
+    res.type('text/plain').send(base64Response);
     return;
   }
 
