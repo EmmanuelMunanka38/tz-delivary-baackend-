@@ -28,6 +28,10 @@ import whatsappFlowRoutes from './routes/whatsapp-flow';
 
 const app = express();
 
+// Trust the Render proxy (and any reverse proxy) so req.ip reflects the
+// real client IP via X-Forwarded-For instead of the proxy's IP.
+app.set('trust proxy', true);
+
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
