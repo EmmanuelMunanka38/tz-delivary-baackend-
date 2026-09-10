@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 
 import config from './config';
-import { generalLimiter } from './middleware/rateLimiter';
+import { globalLimiter, publicLimiter } from './middleware/rateLimiter';
 import errorHandler from './middleware/errorHandler';
 // routes ie api_endpoints
 import authRoutes from './routes/auth';
@@ -73,8 +73,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/payments', clickPesaWebhookRouter);
 app.use('/api/subscriptions/webhook', clickPesaSubscriptionWebhookRouter);
 
-// Rate limiting
-app.use('/api/', generalLimiter);
+// Rate limiting — global gateway first, then per-IP public limiter
+app.use(globalLimiter);
+app.use('/api/', publicLimiter);
 
 // Static files for uploads
 const uploadsDir = path.join(process.cwd(), 'uploads');
