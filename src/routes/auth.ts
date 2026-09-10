@@ -7,7 +7,7 @@ import { z } from 'zod';
 import prisma from '../db/prisma';
 import auth, { AuthRequest } from '../middleware/auth';
 import validate from '../middleware/validate';
-import { otpLimiter, authLimiter } from '../middleware/rateLimiter';
+import { authLimiter } from '../middleware/rateLimiter';
 import * as authService from '../services/auth.service';
 
 const router = Router();
@@ -62,7 +62,7 @@ router.post('/social', validate(socialLoginSchema), authLimiter, async (req, res
   }
 });
 
-router.post('/send-otp', validate(sendOtpSchema), otpLimiter, async (req, res: Response): Promise<void> => {
+router.post('/send-otp', validate(sendOtpSchema), authLimiter, async (req, res: Response): Promise<void> => {
   try {
     const { email, phone, role } = req.body;
     await authService.createOtpRecord(email, phone, role);

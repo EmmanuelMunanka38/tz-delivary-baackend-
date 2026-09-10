@@ -19,47 +19,58 @@ const emailKeyGenerator = (req: Request): string => {
 
 // Base configuration shared across limiters
 const baseConfig = {
-  standardHeaders: true,
+  standardHeaders: true, // RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset
   legacyHeaders: false,
   // Skip CORS preflight requests so mobile apps aren't double-counted
   skip: (req: Request) => req.method === 'OPTIONS',
 };
 
 /**
- * General API limiter. Applied to every /api/* request.
- * Kept generous so routine data fetching is never blocked during normal use,
- * and successful responses are not counted against the bucket.
+ * Global gateway cap — 5 000 req / sec across ALL clients.
+ * Prevents server overload and database exhaustion.
+ * Applied before every per-IP limiter in the middleware chain.
  */
-export const generalLimiter = rateLimit({
+export const globalLimiter = rateLimit({
   ...baseConfig,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,
+  windowMs: 1 * 1000, // 1 second
+  max: 5000,
+  keyGenerator: () => 'global', // single shared bucket
+  statusCode: 429,
+  message: { success: false, message: 'Server is experiencing high traffic. Please retry shortly.' },
+});
+
+/**
+ * Public API limiter — 100 req / min per IP.
+ * Covers general GET requests, public endpoints, and scraper defence.
+ * Successful responses are NOT counted so normal browsing isn't penalised.
+ */
+export const publicLimiter = rateLimit({
+  ...baseConfig,
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100,
   skipSuccessfulRequests: true,
   keyGenerator: (req) => req.ip || 'unknown-ip',
+  statusCode: 429,
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
 /**
- * Auth attempt limiter (used on OTP verification).
- * Keyed by email so one user's failures don't block others.
- * Successful verifications are not counted against the bucket.
+ * Auth attempt limiter — 5 req / min.
+ * Keyed by email (falls back to IP) for login, signup, OTP send/verify,
+ * and password-reset routes. Prevents brute-forcing while isolating
+ * one user's failures from another's.
  */
 export const authLimiter = rateLimit({
   ...baseConfig,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5,
   skipSuccessfulRequests: true,
   keyGenerator: emailKeyGenerator,
+  statusCode: 429,
   message: { success: false, message: 'Too many auth attempts, please try again later.' },
 });
 
 /**
- * OTP sending limiter. Generous enough to allow a resend.
+ * @deprecated Use `authLimiter` directly — same config (5 req / min).
  */
-export const otpLimiter = rateLimit({
-  ...baseConfig,
-  windowMs: 60 * 1000, // 1 minute
-  max: 5,
-  keyGenerator: emailKeyGenerator,
-  message: { success: false, message: 'Too many OTP requests. Please wait before trying again.' },
-});
+export const otpLimiter = authLimiter;
