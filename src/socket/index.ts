@@ -1,5 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
 import config from '../config';
 import prisma from '../db/prisma';
@@ -20,6 +22,13 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
     pingInterval: 10000,
     pingTimeout: 5000,
   });
+
+  // Redis adapter — enables Socket.IO to work across multiple server instances
+  const pubClient = new Redis(config.redis.url, {
+    tls: config.redis.url.startsWith('rediss://') ? {} : undefined,
+  });
+  const subClient = pubClient.duplicate();
+  io.adapter(createAdapter(pubClient, subClient));
 
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {

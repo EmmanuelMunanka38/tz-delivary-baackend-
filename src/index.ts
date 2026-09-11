@@ -3,6 +3,7 @@ import http from 'http';
 import app from './app';
 import config from './config';
 import prisma from './db/prisma';
+import { closeRedis } from './db/redis';
 import { initializeSocket } from './socket';
 
 const server = http.createServer(app);
@@ -30,6 +31,7 @@ const shutdown = async (signal: string) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   server.close(async () => {
     await prisma.$disconnect();
+    await closeRedis();
     console.log('Server closed');
     process.exit(0);
   });

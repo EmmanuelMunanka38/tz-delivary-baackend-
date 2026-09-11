@@ -48,6 +48,11 @@ const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   },
 
+  upstash: {
+    redisRestUrl: process.env.UPSTASH_REDIS_REST_URL || '',
+    redisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+  },
+
   email: {
     mode:
       process.env.EMAIL_MODE ||

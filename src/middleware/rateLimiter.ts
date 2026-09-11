@@ -1,12 +1,40 @@
 import rateLimit from 'express-rate-limit';
+import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { Request } from 'express';
+import { redis } from '../db/redis';
+
+/**
+ * Strips port suffixes from IP addresses so that `192.0.2.1:12345`
+ * and `[::1]:8080` both resolve to clean IPs for consistent bucketing.
+ */
+const extractCleanIp = (req: Request): string => {
+  const raw = req.ip || 'unknown-ip';
+
+  // IPv4 with port — 192.0.2.1:12345 → 192.0.2.1
+  if (raw.includes(':') && !raw.includes('[')) {
+    const parts = raw.split(':');
+    if (parts.length === 2 && parts[0].split('.').length === 4) {
+      return parts[0];
+    }
+  }
+
+  // Bracketed IPv6 — [::1]:8080 → ::1
+  if (raw.startsWith('[')) {
+    const closingBracket = raw.indexOf(']');
+    if (closingBracket !== -1) {
+      return raw.slice(1, closingBracket);
+    }
+  }
+
+  return raw;
+};
 
 /**
  * Generates a unique key based on normalized email, falling back to IP.
  * Isolates buckets so one user missing an email doesn't block everyone else.
  */
 const emailKeyGenerator = (req: Request): string => {
-  const clientIp = req.ip || 'unknown-ip';
+  const clientIp = extractCleanIp(req);
   const rawEmail = req.body?.email;
 
   if (typeof rawEmail === 'string' && rawEmail.trim().length > 0) {
@@ -17,12 +45,19 @@ const emailKeyGenerator = (req: Request): string => {
   return `ip_${clientIp}`;
 };
 
+// Distributed Redis-backed store — counts are shared across all app instances
+const store = new RedisStore({
+  sendCommand: (command: string, ...args: string[]) =>
+    redis.call(command, ...args) as Promise<RedisReply>,
+});
+
 // Base configuration shared across limiters
 const baseConfig = {
   standardHeaders: true, // RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset
   legacyHeaders: false,
   // Skip CORS preflight requests so mobile apps aren't double-counted
   skip: (req: Request) => req.method === 'OPTIONS',
+  store,
 };
 
 /**
@@ -49,7 +84,7 @@ export const publicLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 100,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => req.ip || 'unknown-ip',
+  keyGenerator: (req) => extractCleanIp(req),
   statusCode: 429,
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
