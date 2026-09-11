@@ -22,7 +22,7 @@ const getAuthKey = (req: Request): string => {
 
 /**
  * Shared Redis store factory with fail-open error handling.
- * If Redis is unreachable the command returns 0 so requests pass through
+ * If Redis is unreachable, returns responses that let requests pass through
  * rather than crashing the server or blocking all traffic.
  */
 const makeStore = (prefix: string) =>
@@ -36,6 +36,12 @@ const makeStore = (prefix: string) =>
         return (await redis.call(command, ...args)) as RedisReply;
       } catch (err) {
         console.error(`[RateLimiter] Redis error (${command}):`, err);
+        // rate-limit-redis v6 EVAL scripts expect [totalHits, pttl].
+        // Returning [0, 60000] = 0 hits → fail-open (allow request).
+        if (command === 'EVALSHA' || command === 'EVAL') {
+          return [0, 60_000] as unknown as RedisReply;
+        }
+        // SCRIPT LOAD expects a SHA string; other commands expect a number.
         return 0 as unknown as RedisReply;
       }
     },
