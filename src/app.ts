@@ -28,10 +28,9 @@ import whatsappFlowRoutes from './routes/whatsapp-flow';
 
 const app = express();
 
-// Trust the proxy chain: pikifood-proxy → Render LB → Backend.
-// trust proxy: 2 tells Express to skip the last 2 hops so req.ip
-// resolves to the real client IP, not the proxy's IP.
-app.set('trust proxy', 2);
+// Trust all proxies in the chain (Cloudflare → pikifood-proxy → Render LB → Backend).
+// The real client IP is extracted from the leftmost entry in X-Forwarded-For.
+app.set('trust proxy', true);
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
