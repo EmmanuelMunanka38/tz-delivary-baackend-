@@ -5,6 +5,7 @@ import auth, { AuthRequest } from '../middleware/auth';
 import role from '../middleware/role';
 import validate from '../middleware/validate';
 import { storage } from '../services/storage.service';
+import { PaymentMethod } from '@prisma/client';
 
 const router = Router();
 
@@ -70,7 +71,7 @@ const updateMenuItemSchema = z.object({
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { cuisine, search, isOpen, ownerId } = req.query;
+    const { cuisine, search, isOpen, ownerId } = req.query; // adding payment id for using LIPA NAMBA 
     const where: any = {};
 
     // Public listing: show only approved restaurants
@@ -156,7 +157,7 @@ router.get('/:id/menu', async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({ success: false, message: 'Failed to fetch menu' });
   }
 });
-
+// the error i am getting about persission not allowed 
 router.post(
   '/',
   auth,
