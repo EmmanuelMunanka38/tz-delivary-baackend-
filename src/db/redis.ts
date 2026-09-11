@@ -3,13 +3,27 @@ import { Redis as UpstashRedis } from '@upstash/redis';
 import config from '../config';
 
 /**
- * ioredis client — used by BullMQ and Socket.IO adapter.
- * Connects to Upstash Redis via TLS in production, or a local Redis in dev.
+ * Extracts the hostname from a Redis URL for TLS SNI.
+ * e.g. `rediss://default:pass@redis.layerbase.com:6380` → `redis.layerbase.com`
+ */
+const getTlsOptions = (url: string): Record<string, unknown> | undefined => {
+  if (!url.startsWith('rediss://')) return undefined;
+  try {
+    const hostname = new URL(url).hostname;
+    return { servername: hostname };
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * ioredis client — used by BullMQ, Socket.IO adapter, and rate limiter store.
+ * Connects to Upstash/LayerBase Redis via TLS in production, or a local Redis in dev.
  */
 export const redis = new Redis(config.redis.url, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
-  tls: config.redis.url.startsWith('rediss://') ? {} : undefined,
+  tls: getTlsOptions(config.redis.url),
 });
 
 redis.on('error', (err) => {
