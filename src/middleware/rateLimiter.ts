@@ -1,127 +1,127 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type Options } from 'express-rate-limit';
 import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { Request } from 'express';
 import { redis } from '../db/redis';
 
-const extractCleanIp = (req: Request): string => {
-  const raw = req.ip || 'unknown-ip';
+/**
+ * Safely fetches the real client IP parsed by Express.
+ * trust proxy is set to 1 so req.ip reflects X-Forwarded-For.
+ */
+const getClientIp = (req: Request): string =>
+  req.ip || req.socket.remoteAddress || 'unknown';
 
-  if (raw.includes(':') && !raw.includes('[')) {
-    const parts = raw.split(':');
-    if (parts.length === 2 && parts[0].split('.').length === 4) {
-      return parts[0];
-    }
-  }
-
-  if (raw.startsWith('[')) {
-    const closingBracket = raw.indexOf(']');
-    if (closingBracket !== -1) {
-      return raw.slice(1, closingBracket);
-    }
-  }
-
-  return raw;
+/**
+ * Composite key (IP + Email) prevents brute-forcing while avoiding total IP lockout.
+ */
+const getAuthKey = (req: Request): string => {
+  const ip = getClientIp(req);
+  const email =
+    typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  return email ? `ip:${ip}:email:${email}` : `ip:${ip}`;
 };
 
 /**
- * Composite key (IP + Email) prevents an attacker from locking out real users,
- * while ensuring an attacker can't brute-force an account from a single IP.
+ * Shared Redis store factory with fail-open error handling.
+ * If Redis is unreachable the command returns 0 so requests pass through
+ * rather than crashing the server or blocking all traffic.
  */
-const emailKeyGenerator = (req: Request): string => {
-  const clientIp = extractCleanIp(req);
-  const rawEmail = req.body?.email;
-
-  if (typeof rawEmail === 'string' && rawEmail.trim().length > 0) {
-    const normalizedEmail = rawEmail.trim().toLowerCase();
-    return `${clientIp}_email_${normalizedEmail}`;
-  }
-
-  return `ip_${clientIp}`;
-};
-
-const createStore = (prefix: string) =>
+const makeStore = (prefix: string) =>
   new RedisStore({
     prefix: `rl:${prefix}:`,
-    sendCommand: (command: string, ...args: string[]) =>
-      redis.call(command, ...args) as Promise<RedisReply>,
+    sendCommand: async (
+      command: string,
+      ...args: string[]
+    ): Promise<RedisReply> => {
+      try {
+        return (await redis.call(command, ...args)) as RedisReply;
+      } catch (err) {
+        console.error(`[RateLimiter] Redis error (${command}):`, err);
+        return 0 as unknown as RedisReply;
+      }
+    },
   });
 
-const baseConfig = {
+const baseConfig: Partial<Options> = {
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req: Request) => req.method === 'OPTIONS',
+  statusCode: 429,
 };
 
 /**
- * 1. Global Limiter: Uses Memory store (or increased limit) to prevent Redis delays 
- * from blocking legitimate overall traffic spikes.
+ * 1. Global Per-IP Guard: Caps high-frequency bursts (e.g., 100 req/sec) per IP.
+ * Uses Redis so counts sync across all Render app instances.
  */
 export const globalLimiter = rateLimit({
   ...baseConfig,
-  windowMs: 1 * 1000,
-  max: 10000, // Increased threshold
-  keyGenerator: () => 'global',
-  statusCode: 429,
-  message: { success: false, message: 'Server is experiencing high traffic. Please retry shortly.' },
+  store: makeStore('global'),
+  windowMs: 1_000,
+  max: 100,
+  keyGenerator: getClientIp,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP. Please slow down.',
+  },
 });
 
 /**
- * 2. Public API Limiter: Applied to ALL /api/ routes as a safety net.
- * Set high (1000/min) so normal mobile/SPA usage never triggers false 429s.
- * Tighter limits are applied per-route below for endpoints that need them.
+ * 2. Public API Limiter: Standard limit for general API consumption.
+ * Counts ALL requests (no skipSuccessfulRequests so scrapers can't abuse 200 OK).
  */
 export const publicLimiter = rateLimit({
   ...baseConfig,
-  store: createStore('public'),
-  windowMs: 1 * 60 * 1000,
-  max: 1000,
-  skipSuccessfulRequests: true,
-  keyGenerator: (req) => extractCleanIp(req),
-  statusCode: 429,
-  message: { success: false, message: 'Too many requests, please try again later.' },
+  store: makeStore('public'),
+  windowMs: 60 * 1_000,
+  max: 300,
+  keyGenerator: getClientIp,
+  message: {
+    success: false,
+    message: 'Rate limit exceeded. Try again shortly.',
+  },
 });
 
 /**
- * 3. Open endpoint limiter: Tighter cap for unauthenticated public endpoints
- * (restaurant listing, categories, promotions) that are vulnerable to scraping.
- * Applied selectively — NOT to authenticated routes.
+ * 3. Open Read Endpoints: Selective tight limit for heavy read operations.
  */
 export const openEndpointLimiter = rateLimit({
   ...baseConfig,
-  store: createStore('open'),
-  windowMs: 1 * 60 * 1000,
-  max: 120,
-  skipSuccessfulRequests: false,
-  keyGenerator: (req) => extractCleanIp(req),
-  statusCode: 429,
-  message: { success: false, message: 'Too many requests, please slow down.' },
+  store: makeStore('open'),
+  windowMs: 60 * 1_000,
+  max: 60,
+  keyGenerator: getClientIp,
+  message: {
+    success: false,
+    message: 'Too many requests for this resource.',
+  },
 });
 
 /**
- * 4. Auth Limiter: Dedicated store for standard login/signup attempts.
+ * 4. Auth Limiter: Protects login/signup against credential stuffing.
+ * 15-minute sliding window with 10 total attempts per IP+Email pair.
  */
 export const authLimiter = rateLimit({
   ...baseConfig,
-  store: createStore('auth'),
-  windowMs: 1 * 60 * 1000,
-  max: 10, // Raised to 10 attempts/min
-  skipSuccessfulRequests: true,
-  keyGenerator: emailKeyGenerator,
-  statusCode: 429,
-  message: { success: false, message: 'Too many auth attempts, please try again later.' },
+  store: makeStore('auth'),
+  windowMs: 15 * 60 * 1_000,
+  max: 10,
+  keyGenerator: getAuthKey,
+  message: {
+    success: false,
+    message: 'Too many login attempts. Please wait 15 minutes.',
+  },
 });
 
 /**
- * 5. OTP Limiter: Separate Redis bucket ('otp') so hitting the login limit
- * does NOT block a user from requesting/verifying an OTP code.
+ * 5. OTP Limiter: Strict short-window cap on SMS/Email verification codes.
  */
 export const otpLimiter = rateLimit({
   ...baseConfig,
-  store: createStore('otp'), // Distinct store from auth
-  windowMs: 1 * 60 * 1000,
+  store: makeStore('otp'),
+  windowMs: 5 * 60 * 1_000,
   max: 5,
-  skipSuccessfulRequests: false, // Prevents automated rapid re-use on valid OTPs
-  keyGenerator: emailKeyGenerator,
-  statusCode: 429,
-  message: { success: false, message: 'Too many OTP attempts, please try again later.' },
+  keyGenerator: getAuthKey,
+  message: {
+    success: false,
+    message: 'Too many OTP requests. Please wait a few minutes.',
+  },
 });
