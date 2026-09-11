@@ -4,11 +4,16 @@ import { Request } from 'express';
 import { redis } from '../db/redis';
 
 /**
- * Safely fetches the real client IP parsed by Express.
- * trust proxy is set to 1 so req.ip reflects X-Forwarded-For.
+ * Extracts the real client IP from the leftmost entry in X-Forwarded-For.
+ * Falls back to req.ip or socket address if the header is missing.
  */
-const getClientIp = (req: Request): string =>
-  req.ip || req.socket.remoteAddress || 'unknown';
+const getClientIp = (req: Request): string => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket.remoteAddress || 'unknown';
+};
 
 /**
  * Composite key (IP + Email) prevents brute-forcing while avoiding total IP lockout.
