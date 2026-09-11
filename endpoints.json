@@ -1,0 +1,975 @@
+{
+  "$schema": "Piki Food Delivery API — Complete endpoint reference for frontend integration",
+  "baseUrl": "/api",
+  "roles": ["customer", "restaurant_owner", "driver", "admin"],
+  "authScheme": "Bearer token in Authorization header",
+  "globalMiddleware": {
+    "securityHeaders": "helmet (cross-origin resource policy)",
+    "cors": "Configurable origin with credentials",
+    "compression": "gzip / brotli",
+    "bodyParser": "JSON (10MB limit) + URL-encoded",
+    "rateLimiting": {
+      "global": "5000 req/1s shared across all clients",
+      "perIp": "100 req/min per IP (Redis-backed)"
+    }
+  },
+  "modules": {
+    "health": {
+      "description": "Health checks and metrics",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/",
+          "auth": false,
+          "description": "Root health check",
+          "response": { "success": "boolean", "message": "string" }
+        },
+        {
+          "method": "GET",
+          "path": "/api/health",
+          "auth": false,
+          "description": "Health check with timestamp and uptime",
+          "response": { "success": "boolean", "timestamp": "string (ISO 8601)", "uptime": "number (seconds)" }
+        },
+        {
+          "method": "GET",
+          "path": "/api/metrics",
+          "auth": false,
+          "description": "Server metrics: memory, uptime, Node version, environment",
+          "response": { "success": "boolean", "memoryUsage": "object", "uptime": "number", "nodeVersion": "string", "environment": "string" }
+        }
+      ]
+    },
+    "auth": {
+      "prefix": "/api/auth",
+      "description": "Authentication, OTP-based login/signup, profile management",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/auth/social",
+          "auth": false,
+          "rateLimit": "authLimiter (5 req/min)",
+          "description": "Social login via Google or Apple ID token",
+          "requestBody": {
+            "idToken": "string (required)"
+          },
+          "response": {
+            "success": "boolean",
+            "data": {
+              "accessToken": "string",
+              "refreshToken": "string",
+              "user": "User"
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/send-otp",
+          "auth": false,
+          "rateLimit": "authLimiter (5 req/min)",
+          "description": "Send OTP code to email + phone",
+          "requestBody": {
+            "email": "string (required, valid email)",
+            "phone": "string (required)",
+            "role": "customer | restaurant_owner | driver (optional, defaults to customer)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/verify-otp",
+          "auth": false,
+          "rateLimit": "authLimiter (5 req/min)",
+          "description": "Verify OTP code — logs in existing user or creates new one",
+          "requestBody": {
+            "email": "string (required)",
+            "code": "string (required, 4 digits)",
+            "name": "string (optional, used on signup)",
+            "rememberMe": "boolean (optional)",
+            "role": "string (optional)"
+          },
+          "response": {
+            "success": "boolean",
+            "data": {
+              "accessToken": "string",
+              "refreshToken": "string",
+              "user": "User"
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/refresh",
+          "auth": false,
+          "description": "Refresh access token using refresh token",
+          "requestBody": {
+            "refreshToken": "string (required)"
+          },
+          "response": {
+            "success": "boolean",
+            "data": { "accessToken": "string" }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/auth/profile",
+          "auth": true,
+          "description": "Get current authenticated user profile",
+          "response": {
+            "success": "boolean",
+            "data": {
+              "id": "uuid",
+              "phone": "string",
+              "name": "string",
+              "avatar": "string | null",
+              "email": "string",
+              "role": "customer | restaurant_owner | driver | admin",
+              "fcmToken": "string | null",
+              "clickPesaPhone": "string | null",
+              "hasUsedFreeTrial": "boolean",
+              "createdAt": "string (ISO 8601)"
+            }
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/auth/profile",
+          "auth": true,
+          "description": "Update current user profile fields",
+          "requestBody": {
+            "name": "string (optional)",
+            "email": "string (optional)",
+            "avatar": "string (optional)",
+            "fcmToken": "string (optional)",
+            "clickPesaPhone": "string (optional)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/logout",
+          "auth": true,
+          "description": "Invalidate refresh token and log out"
+        }
+      ]
+    },
+    "users": {
+      "prefix": "/api/users",
+      "description": "User management (admin)",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/users",
+          "auth": true,
+          "roles": ["admin"],
+          "description": "List all users",
+          "response": {
+            "success": "boolean",
+            "data": [{
+              "id": "uuid",
+              "phone": "string",
+              "name": "string",
+              "email": "string",
+              "avatar": "string | null",
+              "role": "string",
+              "createdAt": "string (ISO 8601)"
+            }]
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/users/drivers",
+          "auth": true,
+          "description": "List all drivers",
+          "response": {
+            "success": "boolean",
+            "data": [{
+              "id": "uuid",
+              "name": "string",
+              "phone": "string",
+              "avatar": "string | null",
+              "createdAt": "string (ISO 8601)"
+            }]
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/users/role",
+          "auth": true,
+          "roles": ["admin"],
+          "description": "Update a user's role",
+          "requestBody": {
+            "userId": "string (required)",
+            "role": "customer | restaurant_owner | driver | admin (required)"
+          }
+        }
+      ]
+    },
+    "restaurants": {
+      "prefix": "/api/restaurants",
+      "description": "Restaurant and menu management",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/restaurants",
+          "auth": false,
+          "description": "List approved restaurants",
+          "queryParams": {
+            "cuisine": "string (optional, filter by cuisine type)",
+            "search": "string (optional, search by name)",
+            "isOpen": "boolean (optional, filter by open status)",
+            "ownerId": "uuid (optional, filter by owner)"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/restaurants/featured",
+          "auth": false,
+          "description": "Top 5 open + approved restaurants by rating"
+        },
+        {
+          "method": "GET",
+          "path": "/api/restaurants/:id",
+          "auth": false,
+          "description": "Get restaurant by ID with available menu items"
+        },
+        {
+          "method": "GET",
+          "path": "/api/restaurants/:id/menu",
+          "auth": false,
+          "description": "Get menu items for a restaurant",
+          "queryParams": {
+            "includeUnavailable": "boolean (optional, default false)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/restaurants",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Create a new restaurant (auto-approved)",
+          "requestBody": {
+            "name": "string (required)",
+            "image": "string (required, URL)",
+            "cuisine": "string (required)",
+            "deliveryFee": "number (required)",
+            "deliveryTime": "string (required)",
+            "distance": "number (required)",
+            "address": "string (required)",
+            "logo": "string (optional, URL)",
+            "latitude": "number (optional)",
+            "longitude": "number (optional)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/restaurants/:id",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Update own restaurant details",
+          "requestBody": {
+            "name": "string (optional)",
+            "image": "string (optional)",
+            "logo": "string (optional)",
+            "cuisine": "string (optional)",
+            "rating": "number (optional)",
+            "ratingCount": "number (optional)",
+            "deliveryFee": "number (optional)",
+            "deliveryTime": "string (optional)",
+            "distance": "number (optional)",
+            "address": "string (optional)",
+            "isOpen": "boolean (optional)",
+            "customMessage": "string (optional)",
+            "nextOpenTime": "string (optional, ISO 8601)",
+            "latitude": "number (optional)",
+            "longitude": "number (optional)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/restaurants/:id/menu",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Add a menu item to own restaurant",
+          "requestBody": {
+            "name": "string (required)",
+            "description": "string (optional)",
+            "price": "number (required)",
+            "image": "string (optional, URL)",
+            "category": "string (required)",
+            "isAvailable": "boolean (optional, default true)",
+            "isPopular": "boolean (optional, default false)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/restaurants/menu/:menuId",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Update a menu item (own restaurant)",
+          "requestBody": {
+            "name": "string (optional)",
+            "description": "string (optional)",
+            "price": "number (optional)",
+            "image": "string (optional)",
+            "category": "string (optional)",
+            "isAvailable": "boolean (optional)",
+            "isPopular": "boolean (optional)"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/restaurants/menu/:menuId",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Delete a menu item + associated image from storage"
+        }
+      ]
+    },
+    "categories": {
+      "prefix": "/api/categories",
+      "description": "Menu categories",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/categories",
+          "auth": false,
+          "description": "List all categories sorted by name"
+        }
+      ]
+    },
+    "cart": {
+      "prefix": "/api/cart",
+      "description": "Shopping cart management",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/cart",
+          "auth": true,
+          "description": "Get current user's cart (creates if not exists)",
+          "response": {
+            "success": "boolean",
+            "data": {
+              "id": "uuid",
+              "userId": "uuid",
+              "restaurantId": "uuid | null",
+              "items": [{
+                "id": "uuid",
+                "menuItemId": "uuid",
+                "quantity": "number",
+                "menuItem": "MenuItem"
+              }]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/cart/add",
+          "auth": true,
+          "description": "Add item to cart. Clears cart if switching restaurants.",
+          "requestBody": {
+            "restaurantId": "uuid (required)",
+            "menuItemId": "uuid (required)",
+            "quantity": "integer (optional, default 1)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/cart/items/:itemId",
+          "auth": true,
+          "description": "Update cart item quantity (0 removes the item)",
+          "requestBody": {
+            "quantity": "integer (required, 0 = delete)"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/cart/items/:itemId",
+          "auth": true,
+          "description": "Remove specific cart item"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/cart",
+          "auth": true,
+          "description": "Clear entire cart"
+        }
+      ]
+    },
+    "orders": {
+      "prefix": "/api/orders",
+      "description": "Order lifecycle — placement, tracking, status updates, cancellation",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/orders",
+          "auth": true,
+          "roles": ["customer"],
+          "description": "Place a new order. Calculates fees, creates order items, sends push notification to restaurant owner.",
+          "requestBody": {
+            "restaurantId": "uuid (required)",
+            "items": [
+              {
+                "menuItemId": "uuid (required)",
+                "quantity": "integer (required)",
+                "specialInstructions": "string (optional)"
+              }
+            ],
+            "paymentMethod": "mpesa | tigo_pesa | airtel_money | mixx_by_yas | halopesa | card | cash (required)",
+            "deliveryAddress": {
+              "label": "string (required)",
+              "street": "string (required)",
+              "area": "string (required)",
+              "city": "string (required)",
+              "isDefault": "boolean (optional)"
+            }
+          },
+          "response": {
+            "success": "boolean",
+            "data": {
+              "id": "uuid",
+              "orderNumber": "string",
+              "userId": "uuid",
+              "restaurantId": "uuid",
+              "items": "OrderItem[]",
+              "subtotal": "number",
+              "deliveryFee": "number",
+              "serviceFee": "number",
+              "total": "number",
+              "paymentMethod": "string",
+              "deliveryAddress": "object",
+              "status": "pending",
+              "estimatedDelivery": "string (ISO 8601)"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/orders",
+          "auth": true,
+          "description": "List orders filtered by role — customer: own orders, restaurant_owner: their restaurants' orders, driver: assigned orders"
+        },
+        {
+          "method": "GET",
+          "path": "/api/orders/:id",
+          "auth": true,
+          "description": "Get single order with items + restaurant details"
+        },
+        {
+          "method": "GET",
+          "path": "/api/orders/:id/track",
+          "auth": true,
+          "description": "Track order — status, estimated time, rider info, status steps",
+          "response": {
+            "success": "boolean",
+            "data": {
+              "status": "string",
+              "estimatedMinutes": "number | null",
+              "estimatedArrival": "string (ISO 8601) | null",
+              "rider": { "name": "string", "phone": "string", "avatar": "string | null" } | null,
+              "statusSteps": "array"
+            }
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/orders/:id/status",
+          "auth": true,
+          "roles": ["restaurant_owner", "driver"],
+          "description": "Update order status. Restaurant: restaurant_accepted → preparing → ready_for_pickup. Driver: picked_up → on_the_way → arrived → delivered. Triggers delivery request + push notifications.",
+          "requestBody": {
+            "status": "restaurant_accepted | preparing | ready_for_pickup | picked_up | on_the_way | arrived | delivered (required)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/orders/:id/assign-driver",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Manually assign a driver to an order. Creates delivery request.",
+          "requestBody": {
+            "driverId": "uuid (required)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/orders/:id/cancel",
+          "auth": true,
+          "roles": ["customer"],
+          "description": "Cancel order (only when status is 'pending' or 'restaurant_accepted')"
+        },
+        {
+          "method": "POST",
+          "path": "/api/orders/:id/reorder",
+          "auth": true,
+          "roles": ["customer"],
+          "description": "Duplicate a previous order with same items"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/orders",
+          "auth": true,
+          "roles": ["customer"],
+          "description": "Delete ALL of current customer's orders (cascading: delivery requests, payments, items)"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/orders/:id",
+          "auth": true,
+          "roles": ["customer"],
+          "description": "Delete a specific own order"
+        }
+      ]
+    },
+    "driver": {
+      "prefix": "/api/driver",
+      "description": "Driver-specific endpoints for delivery management",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/driver/requests",
+          "auth": true,
+          "roles": ["driver"],
+          "description": "List all available (pending) delivery requests"
+        },
+        {
+          "method": "POST",
+          "path": "/api/driver/requests/:id/accept",
+          "auth": true,
+          "roles": ["driver"],
+          "description": "Accept a delivery request. Assigns driver to order, notifies restaurant + customer."
+        },
+        {
+          "method": "GET",
+          "path": "/api/driver/active",
+          "auth": true,
+          "roles": ["driver"],
+          "description": "Get driver's currently active (accepted) delivery request"
+        },
+        {
+          "method": "GET",
+          "path": "/api/driver/dashboard",
+          "auth": true,
+          "roles": ["driver"],
+          "description": "Driver dashboard stats",
+          "response": {
+            "success": "boolean",
+            "data": {
+              "todayOrders": "number",
+              "dailyRevenue": "number",
+              "orderGrowth": "number (%)",
+              "revenueGrowth": "number (%)",
+              "totalOrders": "number",
+              "totalRevenue": "number"
+            }
+          }
+        }
+      ]
+    },
+    "restaurantOwner": {
+      "prefix": "/api/restaurant-owner",
+      "description": "Restaurant owner dashboard",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/restaurant-owner/dashboard",
+          "auth": true,
+          "roles": ["restaurant_owner"],
+          "description": "Owner dashboard stats",
+          "response": {
+            "success": "boolean",
+            "data": {
+              "todayOrders": "number",
+              "dailyRevenue": "number",
+              "activeRiders": "number",
+              "orderGrowth": "number (%)",
+              "revenueGrowth": "number (%)",
+              "totalOrders": "number",
+              "totalRevenue": "number"
+            }
+          }
+        }
+      ]
+    },
+    "upload": {
+      "prefix": "/api/upload",
+      "description": "Image/file uploads to cloud storage",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/upload",
+          "auth": true,
+          "contentType": "multipart/form-data",
+          "description": "Upload image to cloud storage (max 5MB, JPEG/PNG/WebP/AVIF)",
+          "requestBody": {
+            "file": "File (binary, field name: 'file' or 'image')",
+            "type": "profile | restaurant | menu | promotion"
+          },
+          "response": {
+            "success": "boolean",
+            "data": {
+              "url": "string (CDN URL)",
+              "key": "string (storage key)"
+            }
+          }
+        }
+      ]
+    },
+    "promotions": {
+      "prefix": "/api/promotions",
+      "description": "Promotional banners and offers",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/promotions",
+          "auth": false,
+          "description": "List promotions",
+          "queryParams": {
+            "restaurantId": "uuid (optional, filter by restaurant)",
+            "includeInactive": "boolean (optional)"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/promotions/:id",
+          "auth": false,
+          "description": "Get single promotion"
+        },
+        {
+          "method": "POST",
+          "path": "/api/promotions",
+          "auth": true,
+          "roles": ["restaurant_owner", "admin"],
+          "description": "Create promotion. Restaurant owners can only create for own restaurant. Admins can create global.",
+          "requestBody": {
+            "title": "string (required)",
+            "description": "string (required)",
+            "code": "string (optional, promo code)",
+            "image": "string (optional, URL)",
+            "ctaLabel": "string (optional)",
+            "isActive": "boolean (optional, default true)",
+            "restaurantId": "uuid (optional, null = global)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/promotions/:id",
+          "auth": true,
+          "roles": ["restaurant_owner", "admin"],
+          "description": "Update promotion (own restaurant or admin)",
+          "requestBody": "Same fields as create, all optional"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/promotions/:id",
+          "auth": true,
+          "roles": ["restaurant_owner", "admin"],
+          "description": "Delete promotion (own restaurant or admin)"
+        }
+      ]
+    },
+    "payments": {
+      "prefix": "/api/payments",
+      "description": "ClickPesa mobile money payment processing",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/payments/checkout",
+          "auth": true,
+          "description": "Initiate ClickPesa USSD push payment for an order",
+          "requestBody": {
+            "orderId": "uuid (required)",
+            "amount": "number (required, positive)",
+            "phoneNumber": "string (required, 10-15 chars)",
+            "currency": "string (optional, default 'TZS')"
+          },
+          "response": {
+            "success": "boolean",
+            "data": {
+              "transactionId": "uuid",
+              "orderReference": "string",
+              "status": "PENDING"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/payments/transaction/:orderReference",
+          "auth": true,
+          "description": "Get transaction status by order reference"
+        },
+        {
+          "method": "POST",
+          "path": "/api/payments/webhook",
+          "auth": false,
+          "description": "ClickPesa payment webhook (signature-verified via x-hub-signature-256 header)",
+          "requestBody": {
+            "event": "PAYMENT RECEIVED | PAYMENT FAILED",
+            "data": {
+              "orderReference": "string",
+              "status": "string"
+            }
+          }
+        }
+      ]
+    },
+    "subscriptions": {
+      "prefix": "/api/subscriptions",
+      "description": "Subscription plans, trials, and billing management",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/subscriptions/plans",
+          "auth": false,
+          "description": "List all subscription plans"
+        },
+        {
+          "method": "GET",
+          "path": "/api/subscriptions/plans/:id",
+          "auth": false,
+          "description": "Get single plan by ID"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/plans",
+          "auth": true,
+          "roles": ["admin"],
+          "description": "Create a subscription plan",
+          "requestBody": {
+            "name": "string (required)",
+            "ClickpesaPriceId": "string (required)",
+            "priceCents": "number (required)",
+            "billingInterval": "month | year (required)",
+            "minOrderAmountCents": "number (optional)",
+            "freeDelivery": "boolean (optional)",
+            "discountPercentage": "number (optional)",
+            "isTrialPlan": "boolean (optional)",
+            "trialDays": "number (optional)",
+            "maxMenuItems": "number (optional)",
+            "hasAnalytics": "boolean (optional)",
+            "hasOnlinePayments": "boolean (optional)",
+            "priorityPlacement": "boolean (optional)",
+            "featuredInPopular": "boolean (optional)",
+            "customDesign": "boolean (optional)",
+            "multiBranch": "boolean (optional)",
+            "dedicatedManager": "boolean (optional)"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/subscriptions/plans/:id",
+          "auth": true,
+          "roles": ["admin"],
+          "description": "Update subscription plan",
+          "requestBody": "Same fields as create, all optional"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/subscriptions/plans/:id",
+          "auth": true,
+          "roles": ["admin"],
+          "description": "Delete subscription plan"
+        },
+        {
+          "method": "GET",
+          "path": "/api/subscriptions/my",
+          "auth": true,
+          "description": "Get current user's subscriptions"
+        },
+        {
+          "method": "GET",
+          "path": "/api/subscriptions/my/active",
+          "auth": true,
+          "description": "Get current user's active subscription"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/start-trial",
+          "auth": true,
+          "description": "Start free trial for current user"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/upgrade",
+          "auth": true,
+          "description": "Upgrade from trial to paid plan (initiates ClickPesa payment)",
+          "requestBody": {
+            "planId": "uuid (required)",
+            "phoneNumber": "string (required, 10-15 chars)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/subscribe",
+          "auth": true,
+          "description": "Create new subscription (initiates ClickPesa payment)",
+          "requestBody": {
+            "planId": "uuid (required)",
+            "phoneNumber": "string (required, 10-15 chars)"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/cancel/:id",
+          "auth": true,
+          "description": "Cancel subscription by ID"
+        },
+        {
+          "method": "GET",
+          "path": "/api/subscriptions/check-limit/:feature",
+          "auth": true,
+          "description": "Check if user has hit plan limit for a given feature"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscriptions/webhook",
+          "auth": false,
+          "description": "ClickPesa subscription payment webhook (signature-verified)"
+        }
+      ]
+    },
+    "contact": {
+      "prefix": "/api/contact",
+      "description": "Contact form",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/contact",
+          "auth": false,
+          "description": "Send contact form email",
+          "requestBody": {
+            "name": "string (required)",
+            "email": "string (required, valid email)",
+            "subject": "string (optional)",
+            "message": "string (required)"
+          }
+        }
+      ]
+    },
+    "whatsapp": {
+      "prefix": "/api/whatsapp",
+      "description": "WhatsApp Business API integration",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/whatsapp/webhook",
+          "auth": false,
+          "description": "WhatsApp webhook verification (Meta challenge-response)",
+          "queryParams": {
+            "hub.mode": "string",
+            "hub.verify_token": "string",
+            "hub.challenge": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/whatsapp/webhook",
+          "auth": false,
+          "description": "Process incoming WhatsApp messages/events (signature-verified via x-hub-signature-256)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/whatsapp/flow",
+          "auth": false,
+          "description": "WhatsApp Flow endpoint for in-app ordering: browse restaurants, view menus, add to cart, checkout, pay, track orders (encrypted payload via whatsappFlowEncryption middleware)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/whatsapp/flow/test",
+          "auth": false,
+          "description": "Test endpoint for WhatsApp Flow (unencrypted, for debugging)",
+          "requestBody": {
+            "action": "string",
+            "screen": "string",
+            "data": "object"
+          }
+        }
+      ]
+    },
+    "static": {
+      "description": "Static file serving",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/uploads/*",
+          "auth": false,
+          "description": "Serve uploaded files from ./uploads directory"
+        }
+      ]
+    }
+  },
+  "sharedTypes": {
+    "User": {
+      "id": "uuid",
+      "phone": "string",
+      "name": "string",
+      "email": "string",
+      "avatar": "string | null",
+      "role": "customer | restaurant_owner | driver | admin",
+      "fcmToken": "string | null",
+      "clickPesaPhone": "string | null",
+      "hasUsedFreeTrial": "boolean",
+      "createdAt": "string (ISO 8601)"
+    },
+    "Restaurant": {
+      "id": "uuid",
+      "name": "string",
+      "image": "string (URL)",
+      "logo": "string | null (URL)",
+      "cuisine": "string",
+      "rating": "number",
+      "ratingCount": "number",
+      "deliveryFee": "number",
+      "deliveryTime": "string",
+      "distance": "number",
+      "address": "string",
+      "isOpen": "boolean",
+      "isApproved": "boolean",
+      "customMessage": "string | null",
+      "nextOpenTime": "string | null (ISO 8601)",
+      "latitude": "number | null",
+      "longitude": "number | null",
+      "ownerId": "uuid"
+    },
+    "MenuItem": {
+      "id": "uuid",
+      "restaurantId": "uuid",
+      "name": "string",
+      "description": "string | null",
+      "price": "number",
+      "image": "string | null (URL)",
+      "category": "string",
+      "isAvailable": "boolean",
+      "isPopular": "boolean"
+    },
+    "Order": {
+      "id": "uuid",
+      "orderNumber": "string",
+      "userId": "uuid",
+      "restaurantId": "uuid",
+      "subtotal": "number",
+      "deliveryFee": "number",
+      "serviceFee": "number",
+      "total": "number",
+      "paymentMethod": "mpesa | tigo_pesa | airtel_money | mixx_by_yas | halopesa | card | cash",
+      "deliveryAddress": "object",
+      "status": "pending | restaurant_accepted | preparing | ready_for_pickup | picked_up | on_the_way | arrived | delivered | cancelled",
+      "estimatedDelivery": "string (ISO 8601)",
+      "items": "OrderItem[]",
+      "restaurant": "Restaurant",
+      "createdAt": "string (ISO 8601)"
+    },
+    "OrderItem": {
+      "id": "uuid",
+      "orderId": "uuid",
+      "menuItemId": "uuid",
+      "quantity": "number",
+      "price": "number",
+      "specialInstructions": "string | null",
+      "menuItem": "MenuItem"
+    },
+    "Error": {
+      "success": "false",
+      "message": "string",
+      "errors": "array (validation errors, optional)"
+    }
+  }
+}
