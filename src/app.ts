@@ -28,9 +28,10 @@ import whatsappFlowRoutes from './routes/whatsapp-flow';
 
 const app = express();
 
-// Trust the Render proxy (and any reverse proxy) so req.ip reflects the
-// real client IP via X-Forwarded-For instead of the proxy's IP.
-app.set('trust proxy', 1);
+// Trust the proxy chain: pikifood-proxy → Render LB → Backend.
+// trust proxy: 2 tells Express to skip the last 2 hops so req.ip
+// resolves to the real client IP, not the proxy's IP.
+app.set('trust proxy', 2);
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -108,6 +109,16 @@ app.get('/api/metrics', (_req, res) => {
       nodeVersion: process.version,
       environment: config.nodeEnv,
     },
+  });
+});
+
+// Debug endpoint — shows what IP the rate limiter sees. Remove after debugging.
+app.get('/api/debug/ip', (req, res) => {
+  res.json({
+    ip: req.ip,
+    remoteAddress: req.socket.remoteAddress,
+    forwardedFor: req.headers['x-forwarded-for'] || 'not set',
+    trustProxy: app.get('trust proxy'),
   });
 });
 
