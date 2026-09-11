@@ -24,10 +24,19 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
   });
 
   // Redis adapter — enables Socket.IO to work across multiple server instances
+  const tlsOpts = config.redis.url.startsWith('rediss://')
+    ? (() => { try { return { servername: new URL(config.redis.url).hostname }; } catch { return {}; } })()
+    : undefined;
   const pubClient = new Redis(config.redis.url, {
-    tls: config.redis.url.startsWith('rediss://') ? {} : undefined,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    tls: tlsOpts,
   });
   const subClient = pubClient.duplicate();
+
+  pubClient.on('error', (err) => console.error('[Socket.IO Redis] pub error:', err.message));
+  subClient.on('error', (err) => console.error('[Socket.IO Redis] sub error:', err.message));
+
   io.adapter(createAdapter(pubClient, subClient));
 
   io.use(async (socket: AuthenticatedSocket, next) => {

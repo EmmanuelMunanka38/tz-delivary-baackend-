@@ -45,19 +45,23 @@ const emailKeyGenerator = (req: Request): string => {
   return `ip_${clientIp}`;
 };
 
-// Distributed Redis-backed store — counts are shared across all app instances
-const store = new RedisStore({
-  sendCommand: (command: string, ...args: string[]) =>
-    redis.call(command, ...args) as Promise<RedisReply>,
-});
+/**
+ * Factory — each rate limiter needs its own RedisStore instance with a
+ * unique prefix so express-rate-limit v8 doesn't raise ERR_ERL_STORE_REUSE.
+ */
+const createStore = (prefix: string) =>
+  new RedisStore({
+    prefix: `rl:${prefix}:`,
+    sendCommand: (command: string, ...args: string[]) =>
+      redis.call(command, ...args) as Promise<RedisReply>,
+  });
 
-// Base configuration shared across limiters
+// Base configuration shared across limiters (store is set per-limiter)
 const baseConfig = {
   standardHeaders: true, // RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset
   legacyHeaders: false,
   // Skip CORS preflight requests so mobile apps aren't double-counted
   skip: (req: Request) => req.method === 'OPTIONS',
-  store,
 };
 
 /**
@@ -67,6 +71,7 @@ const baseConfig = {
  */
 export const globalLimiter = rateLimit({
   ...baseConfig,
+  store: createStore('global'),
   windowMs: 1 * 1000, // 1 second
   max: 5000,
   keyGenerator: () => 'global', // single shared bucket
@@ -81,6 +86,7 @@ export const globalLimiter = rateLimit({
  */
 export const publicLimiter = rateLimit({
   ...baseConfig,
+  store: createStore('public'),
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 100,
   skipSuccessfulRequests: true,
@@ -97,6 +103,7 @@ export const publicLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   ...baseConfig,
+  store: createStore('auth'),
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5,
   skipSuccessfulRequests: true,
