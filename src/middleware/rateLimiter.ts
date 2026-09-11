@@ -66,22 +66,39 @@ export const globalLimiter = rateLimit({
 });
 
 /**
- * 2. Public API Limiter: Window increased to 300 req / min to prevent standard 
- * frontend asset loading or fast navigation from triggering false 429s.
+ * 2. Public API Limiter: Applied to ALL /api/ routes as a safety net.
+ * Set high (1000/min) so normal mobile/SPA usage never triggers false 429s.
+ * Tighter limits are applied per-route below for endpoints that need them.
  */
 export const publicLimiter = rateLimit({
   ...baseConfig,
   store: createStore('public'),
   windowMs: 1 * 60 * 1000,
-  max: 300, // Raised from 100 to prevent SPA false positives
-  skipSuccessfulRequests: false,
+  max: 1000,
+  skipSuccessfulRequests: true,
   keyGenerator: (req) => extractCleanIp(req),
   statusCode: 429,
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
 /**
- * 3. Auth Limiter: Dedicated store for standard login/signup attempts.
+ * 3. Open endpoint limiter: Tighter cap for unauthenticated public endpoints
+ * (restaurant listing, categories, promotions) that are vulnerable to scraping.
+ * Applied selectively — NOT to authenticated routes.
+ */
+export const openEndpointLimiter = rateLimit({
+  ...baseConfig,
+  store: createStore('open'),
+  windowMs: 1 * 60 * 1000,
+  max: 120,
+  skipSuccessfulRequests: false,
+  keyGenerator: (req) => extractCleanIp(req),
+  statusCode: 429,
+  message: { success: false, message: 'Too many requests, please slow down.' },
+});
+
+/**
+ * 4. Auth Limiter: Dedicated store for standard login/signup attempts.
  */
 export const authLimiter = rateLimit({
   ...baseConfig,
@@ -95,7 +112,7 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * 4. OTP Limiter: Separate Redis bucket ('otp') so hitting the login limit 
+ * 5. OTP Limiter: Separate Redis bucket ('otp') so hitting the login limit
  * does NOT block a user from requesting/verifying an OTP code.
  */
 export const otpLimiter = rateLimit({

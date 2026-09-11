@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 
 import config from './config';
-import { globalLimiter, publicLimiter } from './middleware/rateLimiter';
+import { globalLimiter, publicLimiter, openEndpointLimiter } from './middleware/rateLimiter';
 import errorHandler from './middleware/errorHandler';
 // routes ie api_endpoints
 import authRoutes from './routes/auth';
@@ -30,7 +30,7 @@ const app = express();
 
 // Trust the Render proxy (and any reverse proxy) so req.ip reflects the
 // real client IP via X-Forwarded-For instead of the proxy's IP.
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -114,14 +114,14 @@ app.get('/api/metrics', (_req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/restaurants', openEndpointLimiter, restaurantRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/categories', categoryRoutes);
+app.use('/api/categories', openEndpointLimiter, categoryRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/restaurant-owner', restaurantOwnerRoutes);
 app.use('/api/upload', uploadRoutes);
-app.use('/api/promotions', promotionRoutes);
+app.use('/api/promotions', openEndpointLimiter, promotionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/contact', contactRoutes);
