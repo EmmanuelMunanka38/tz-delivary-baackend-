@@ -60,7 +60,8 @@ const makeStore = (prefix: string) =>
 const baseConfig: Partial<Options> = {
   standardHeaders: true,
   legacyHeaders: false,
-  passOnStoreError: true, // Native express-rate-limit fail-open setting
+  passOnStoreError: true,
+  validate: { ip: false, xForwardedForHeader: false },
   skip: (req: Request) => req.method === 'OPTIONS',
   statusCode: 429,
 };
