@@ -3,16 +3,19 @@ import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { Request } from 'express';
 import { redis } from '../db/redis';
 
+const ENV_PREFIX = process.env.NODE_ENV || 'production';
+
 /**
- * Extracts the real client IP from the leftmost entry in X-Forwarded-For.
- * Falls back to req.ip or socket address if the header is missing.
+ * Safely extracts client IP.
+ * Prefers Cloudflare's un-spoofable CF-Connecting-IP header, 
+ * falling back to Express's trust-proxy-calculated req.ip.
  */
 const getClientIp = (req: Request): string => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (typeof cfIp === 'string' && cfIp.trim().length > 0) {
+    return cfIp.trim();
   }
-  return req.ip || req.socket.remoteAddress || 'unknown';
+  return req.ip || req.socket.remoteAddress || '127.0.0.1';
 };
 
 /**
@@ -26,27 +29,29 @@ const getAuthKey = (req: Request): string => {
 };
 
 /**
- * Shared Redis store factory with fail-open error handling.
- * If Redis is unreachable, returns responses that let requests pass through
- * rather than crashing the server or blocking all traffic.
+ * Shared Redis store factory with robust fail-open error handling.
  */
 const makeStore = (prefix: string) =>
   new RedisStore({
-    prefix: `rl:${prefix}:`,
+    prefix: `${ENV_PREFIX}:rl:${prefix}:`,
     sendCommand: async (
       command: string,
       ...args: string[]
     ): Promise<RedisReply> => {
+      const cmd = command.toUpperCase();
       try {
         return (await redis.call(command, ...args)) as RedisReply;
       } catch (err) {
-        console.error(`[RateLimiter] Redis error (${command}):`, err);
-        // rate-limit-redis v6 EVAL scripts expect [totalHits, pttl].
-        // Returning [0, 60000] = 0 hits → fail-open (allow request).
-        if (command === 'EVALSHA' || command === 'EVAL') {
+        console.error(`[RateLimiter] Redis error (${cmd}):`, err);
+        
+        // SCRIPT LOAD expects a 40-char SHA string
+        if (cmd === 'SCRIPT') {
+          return '0000000000000000000000000000000000000000' as unknown as RedisReply;
+        }
+        // EVALSHA / EVAL expect [totalHits, timeToExpireMs]
+        if (cmd === 'EVALSHA' || cmd === 'EVAL') {
           return [0, 60_000] as unknown as RedisReply;
         }
-        // SCRIPT LOAD expects a SHA string; other commands expect a number.
         return 0 as unknown as RedisReply;
       }
     },
@@ -55,13 +60,13 @@ const makeStore = (prefix: string) =>
 const baseConfig: Partial<Options> = {
   standardHeaders: true,
   legacyHeaders: false,
+  passOnStoreError: true, // Native express-rate-limit fail-open setting
   skip: (req: Request) => req.method === 'OPTIONS',
   statusCode: 429,
 };
 
 /**
- * 1. Global Per-IP Guard: Caps high-frequency bursts (e.g., 100 req/sec) per IP.
- * Uses Redis so counts sync across all Render app instances.
+ * 1. Global Per-IP Guard: Caps high-frequency bursts per IP.
  */
 export const globalLimiter = rateLimit({
   ...baseConfig,
@@ -77,7 +82,6 @@ export const globalLimiter = rateLimit({
 
 /**
  * 2. Public API Limiter: Standard limit for general API consumption.
- * Counts ALL requests (no skipSuccessfulRequests so scrapers can't abuse 200 OK).
  */
 export const publicLimiter = rateLimit({
   ...baseConfig,
@@ -108,7 +112,6 @@ export const openEndpointLimiter = rateLimit({
 
 /**
  * 4. Auth Limiter: Protects login/signup against credential stuffing.
- * 15-minute sliding window with 10 total attempts per IP+Email pair.
  */
 export const authLimiter = rateLimit({
   ...baseConfig,

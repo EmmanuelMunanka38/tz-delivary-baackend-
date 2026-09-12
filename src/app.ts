@@ -9,7 +9,8 @@ import fs from 'fs';
 import config from './config';
 import { globalLimiter, publicLimiter, openEndpointLimiter } from './middleware/rateLimiter';
 import errorHandler from './middleware/errorHandler';
-// routes ie api_endpoints
+
+// Route Imports
 import authRoutes from './routes/auth';
 import restaurantRoutes from './routes/restaurants';
 import orderRoutes from './routes/orders';
@@ -28,37 +29,25 @@ import whatsappFlowRoutes from './routes/whatsapp-flow';
 
 const app = express();
 
-// Trust all proxies in the chain (Cloudflare → pikifood-proxy → Render LB → Backend).
-// The real client IP is extracted from the leftmost entry in X-Forwarded-For.
+// Trust proxies across multi-hop setup (Cloudflare -> pikifood-proxy -> Render LB)
 app.set('trust proxy', true);
 
-// Security
+// Security & Standard Middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
     origin: (origin, callback) => {
-      // 1. In development, allow requests with no origin (like mobile apps, emulators, or Postman)
-      // 2. Or automatically allow any origin on your local development machine
-      if (config.isDev || !origin) {
-        return callback(null, true);
-      }
-
-      // 3. In production, strictly match against your .env CORS_ORIGIN array
-      if (config.corsOrigin.indexOf(origin) !== -1) {
-        return callback(null, true);
-      } else {
-        return callback(new Error('Not allowed by CORS'));
-      }
+      if (config.isDev || !origin) return callback(null, true);
+      if (config.corsOrigin.indexOf(origin) !== -1) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 );
-// Performance
 app.use(compression());
 
-// Logging
 if (config.isDev) {
   app.use(morgan('dev'));
 } else {
@@ -69,22 +58,22 @@ if (config.isDev) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ClickPesa webhook (must be before rate limiter)
-app.use('/api/payments', clickPesaWebhookRouter);
-app.use('/api/subscriptions/webhook', clickPesaSubscriptionWebhookRouter);
-
-// Rate limiting — global gateway first, then per-IP public limiter
-app.use(globalLimiter);
-app.use('/api/', publicLimiter);
-
-// Static files for uploads
+// Static files for uploads (Bypasses rate limiters)
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadsDir));
 
-// Health check
+
+// 1. UNTHROTTLED OPERATIONAL & WEBHOOK ROUTES (Must be BEFORE rate limiters)
+
+
+// Webhooks
+app.use('/api/payments', clickPesaWebhookRouter);
+app.use('/api/subscriptions/webhook', clickPesaSubscriptionWebhookRouter);
+
+// Health & Monitoring
 app.all('/', (_req, res) => {
   res.json({ success: true, message: 'Piki Food API is running' });
 });
@@ -98,7 +87,6 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// Metrics endpoint (basic)
 app.get('/api/metrics', (_req, res) => {
   res.json({
     success: true,
@@ -111,7 +99,6 @@ app.get('/api/metrics', (_req, res) => {
   });
 });
 
-// Debug endpoint — shows what IP the rate limiter sees. Remove after debugging.
 app.get('/api/debug/ip', (req, res) => {
   res.json({
     ip: req.ip,
@@ -121,7 +108,17 @@ app.get('/api/debug/ip', (req, res) => {
   });
 });
 
-// API Routes
+
+// 2. RATE LIMITERS (Applied only to business API endpoints)
+
+
+app.use(globalLimiter);
+app.use('/api/', publicLimiter);
+
+
+// 3. PROTECTED API ROUTES
+
+
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/restaurants', openEndpointLimiter, restaurantRoutes);
@@ -143,7 +140,7 @@ app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Error handler
+// Global error handler
 app.use(errorHandler);
 
 export default app;
