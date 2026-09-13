@@ -36,7 +36,7 @@ const updateStatusSchema = z.object({
   status: z.enum(['restaurant_accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'on_the_way', 'arrived', 'delivered']),
 });
 
-router.post('/', auth, role('customer'), validate(createOrderSchema), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', auth, validate(createOrderSchema), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { restaurantId, items, paymentMethod, deliveryAddress } = req.body;
 
