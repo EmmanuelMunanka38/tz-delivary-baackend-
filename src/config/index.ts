@@ -69,7 +69,7 @@ const config = {
     pass: process.env.EMAIL_PASS || '',
     from: process.env.EMAIL_FROM || 'noreply@pikifood.co.tz',
     selfHostedPort: parseInt(process.env.SELF_HOSTED_SMTP_PORT || '2525', 10),
-    selfHostedDomain: process.env.SELF_HOSTED_DOMAIN || 'piki.food',
+    selfHostedDomain: process.env.SELF_HOSTED_DOMAIN || 'pikifood.co.tz',
     resendApiKey: process.env.RESEND_API_KEY || '',
     relay: {
       host: process.env.EMAIL_RELAY_HOST || '',

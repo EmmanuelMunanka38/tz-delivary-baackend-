@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import config from '../config';
 
-const CONTACT_RECIPIENT = config.email.from || 'foodpikifast@gmail.com';
+const CONTACT_RECIPIENT = config.email.from || 'noreply@pikifood.co.tz';
 
 let resendClient: Resend | null = null;
 const getResend = (): Resend => {
