@@ -6,7 +6,7 @@ import role from '../middleware/role';
 import validate from '../middleware/validate';
 import * as orderService from '../services/order.service';
 import { sendPushNotification } from '../services/notification.service';
-import { sendOrderConfirmationEmail } from '../services/email.service';
+import { sendOrderConfirmationEmail, sendOrderCancellationEmail } from '../services/email.service';
 import { emitOrderUpdate, emitToUser, emitToRole } from '../socket';
 
 const router = Router();
@@ -529,6 +529,25 @@ router.post('/:id/cancel', auth, role('customer'), async (req: AuthRequest, res:
     });
 
     emitOrderUpdate(order.id, 'order:cancelled', { orderId: order.id });
+
+    try {
+      const [customer, restaurant] = await Promise.all([
+        prisma.user.findUnique({ where: { id: order.userId } }),
+        prisma.restaurant.findUnique({ where: { id: order.restaurantId } }),
+      ]);
+      if (customer?.email && restaurant) {
+        await sendOrderCancellationEmail({
+          to: customer.email,
+          customerName: customer.name || 'Customer',
+          orderNumber: order.orderNumber,
+          restaurantName: restaurant.name,
+          total: order.total,
+          cancelledBy: 'customer',
+        });
+      }
+    } catch (err) {
+      console.error('[EMAIL] Order cancellation email failed:', err);
+    }
 
     res.json({ success: true, message: 'Order cancelled' });
   } catch (error) {
