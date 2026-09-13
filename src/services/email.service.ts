@@ -4,6 +4,10 @@ import config from '../config';
 
 const CONTACT_RECIPIENT = config.email.from || 'noreply@pikifood.co.tz';
 
+// Hardcoded verified sender — must match the domain verified on Resend.
+// Prevents misconfigured EMAIL_FROM env vars from causing 403 errors.
+const RESEND_FROM = 'Piki Food <noreply@pikifood.co.tz>';
+
 let resendClient: Resend | null = null;
 const getResend = (): Resend => {
   if (!resendClient) {
@@ -16,7 +20,7 @@ const getResend = (): Resend => {
 
 async function sendViaResend(to: string, subject: string, html: string, replyTo?: string): Promise<void> {
   const { data, error } = await getResend().emails.send({
-    from: `Piki Food <${config.email.from}>`,
+    from: RESEND_FROM,
     to,
     subject,
     html,
