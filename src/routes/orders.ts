@@ -6,6 +6,7 @@ import role from '../middleware/role';
 import validate from '../middleware/validate';
 import * as orderService from '../services/order.service';
 import { sendPushNotification } from '../services/notification.service';
+import { sendOrderConfirmationEmail } from '../services/email.service';
 import { emitOrderUpdate, emitToUser, emitToRole } from '../socket';
 
 const router = Router();
@@ -108,6 +109,27 @@ router.post('/', auth, role('customer'), validate(createOrderSchema), async (req
         emitToUser(owner.id, 'order:new', { orderId: order.id, orderNumber });
       }
     } catch { /* non-critical */ }
+
+    try {
+      const customer = await prisma.user.findUnique({ where: { id: req.userId! } });
+      if (customer?.email) {
+        await sendOrderConfirmationEmail({
+          to: customer.email,
+          customerName: customer.name || 'Customer',
+          orderNumber: order.orderNumber,
+          restaurantName: order.restaurant.name,
+          items: order.items.map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          subtotal: order.subtotal,
+          deliveryFee: order.deliveryFee,
+          serviceFee: order.serviceFee,
+          total: order.total,
+          paymentMethod: order.paymentMethod,
+          estimatedDelivery: order.estimatedDelivery,
+        });
+      }
+    } catch (err) {
+      console.error('[EMAIL] Order confirmation email failed:', err);
+    }
 
     res.status(201).json({ success: true, data: order });
   } catch (error) {
@@ -587,6 +609,27 @@ router.post('/:id/reorder', auth, role('customer'), async (req: AuthRequest, res
       },
       include: { items: true, restaurant: true },
     });
+
+    try {
+      const customer = await prisma.user.findUnique({ where: { id: req.userId! } });
+      if (customer?.email) {
+        await sendOrderConfirmationEmail({
+          to: customer.email,
+          customerName: customer.name || 'Customer',
+          orderNumber: order.orderNumber,
+          restaurantName: order.restaurant.name,
+          items: order.items.map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          subtotal: order.subtotal,
+          deliveryFee: order.deliveryFee,
+          serviceFee: order.serviceFee,
+          total: order.total,
+          paymentMethod: order.paymentMethod,
+          estimatedDelivery: order.estimatedDelivery,
+        });
+      }
+    } catch (err) {
+      console.error('[EMAIL] Reorder confirmation email failed:', err);
+    }
 
     res.status(201).json({ success: true, data: order });
   } catch (error) {

@@ -3,6 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import prisma from '@/db/prisma';
 import config from '@/config';
 import { getClickPesaToken, createPayloadChecksum } from '@/services/payment.service';
+import { sendSubscriptionConfirmationEmail } from '@/services/email.service';
 import { SubscriptionStatus } from '@prisma/client';
 
 export interface CreatePlanInput {
@@ -357,10 +358,27 @@ export async function handleClickPesaWebhook(event: string, data: any) {
   }
 
   if (event === 'PAYMENT RECEIVED' && data.status === 'SUCCESS') {
-    await prisma.userSubscription.update({
+    const updated = await prisma.userSubscription.update({
       where: { id: subscription.id },
       data: { status: SubscriptionStatus.PAID },
+      include: { plan: true, user: true },
     });
+
+    try {
+      if (updated.user.email) {
+        await sendSubscriptionConfirmationEmail({
+          to: updated.user.email,
+          customerName: updated.user.name || 'Restaurant Owner',
+          planName: updated.plan.name,
+          amount: updated.plan.priceCents / 100,
+          billingInterval: updated.plan.billingInterval,
+          subscriptionRef: updated.stripeSubscriptionId,
+          currentPeriodEnd: updated.currentPeriodEnd,
+        });
+      }
+    } catch (err) {
+      console.error('[EMAIL] Subscription confirmation email failed:', err);
+    }
   } else if (event === 'PAYMENT FAILED') {
     await prisma.userSubscription.update({
       where: { id: subscription.id },
