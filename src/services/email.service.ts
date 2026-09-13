@@ -150,6 +150,19 @@ export const sendSubscriptionConfirmationEmail = async (data: SubscriptionConfir
   await sendEmail(data.to, `Subscription activated — ${data.planName}`, buildSubscriptionConfirmationHtml(data));
 };
 
+export type OrderCancellationData = {
+  to: string;
+  customerName: string;
+  orderNumber: string;
+  restaurantName: string;
+  total: number;
+  cancelledBy: 'customer' | 'restaurant' | 'system';
+};
+
+export const sendOrderCancellationEmail = async (data: OrderCancellationData): Promise<void> => {
+  await sendEmail(data.to, `Order #${data.orderNumber} cancelled — Piki Food`, buildOrderCancellationHtml(data));
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function escapeHtml(value: string): string {
@@ -339,5 +352,40 @@ function buildSubscriptionConfirmationHtml(data: SubscriptionConfirmationData): 
 
   <p style="font-size: 14px; line-height: 20px; color: ${BRAND.muted}; margin: 0 0 0 0;">
     You now have access to all plan features. If you have any questions, reach out through the contact page in your dashboard.
+  </p>`);
+}
+
+function buildOrderCancellationHtml(data: OrderCancellationData): string {
+  const reasonMap: Record<string, string> = {
+    customer: 'You cancelled this order.',
+    restaurant: 'The restaurant cancelled this order.',
+    system: 'This order was cancelled due to a system issue.',
+  };
+  const reason = reasonMap[data.cancelledBy] || reasonMap.system;
+
+  return emailShell(`
+  <h1 style="font-size: 24px; font-weight: 500; color: #000000; margin: 0 0 8px 0; line-height: 1.2;">
+    Order cancelled
+  </h1>
+  <p style="font-size: 16px; line-height: 24px; color: ${BRAND.text}; margin: 0 0 32px 0;">
+    Hi ${escapeHtml(data.customerName)}, your order from ${escapeHtml(data.restaurantName)} has been cancelled.
+  </p>
+
+  <div style="background-color: #fff3f3; padding: 24px; border-left: 4px solid #dc2626; margin: 0 0 28px 0;">
+    <div style="font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; color: #555555; margin-bottom: 8px;">
+      Order Number
+    </div>
+    <div style="font-size: 28px; font-weight: 700; color: #000000; letter-spacing: 1px; line-height: 1;">
+      ${escapeHtml(data.orderNumber)}
+    </div>
+  </div>
+
+  <div style="background-color: ${BRAND.bg}; padding: 20px 24px; margin: 0 0 28px 0;">
+    <p style="margin: 0 0 6px 0; font-size: 14px; color: #555555;"><strong>Total:</strong> ${formatTzs(data.total)}</p>
+    <p style="margin: 0; font-size: 14px; color: #555555;"><strong>Reason:</strong> ${reason}</p>
+  </div>
+
+  <p style="font-size: 14px; line-height: 20px; color: ${BRAND.muted}; margin: 0 0 0 0;">
+    If a payment was made, a refund will be processed within 3–5 business days. If you have questions, reach out through the contact page.
   </p>`);
 }
