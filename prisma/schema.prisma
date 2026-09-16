@@ -387,3 +387,5 @@ model WhatsAppMessage {
   @@index([sessionId])
   @@index([whatsappMessageId])
 }
+
+// we need to add wallets and a unified legerd system that know every Transaction and it related contents like oder , withdraw and other data about that transcation that is made .
