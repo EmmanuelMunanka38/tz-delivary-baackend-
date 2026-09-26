@@ -6,7 +6,8 @@ import auth from '@/middleware/auth';
 import validate from '@/middleware/validate';
 import verifyClickPesaWebhook from '@/middleware/verifyweebhook';
 import { initiateUSSDPush } from '@/services/payment.service';
-import { TransactionStatus } from '@prisma/client';
+import { EntryDirection, TransactionStatus } from '@prisma/client';
+import { MAX_WALLET_AMOUNT } from '../services/wallet.service';
 
 const router = Router();
 
@@ -85,9 +86,37 @@ router.get('/transaction/:orderReference', auth, async (req: AuthRequest, res: R
     const orderReference = req.params.orderReference as string;
     const transaction = await prisma.transaction.findUnique({
       where: { orderReference },
+      include: {
+        wallet: {
+          select: {
+            driverId: true,
+            restaurant: { select: { ownerId: true } },
+          },
+        },
+        order: {
+          select: {
+            userId: true,
+            riderId: true,
+            restaurant: { select: { ownerId: true } },
+          },
+        },
+      },
     });
 
     if (!transaction) {
+      res.status(404).json({ success: false, message: 'Transaction not found' });
+      return;
+    }
+
+    const isAdmin = req.userRole === 'admin';
+    const isWalletOwner =
+      transaction.wallet?.driverId === req.userId ||
+      transaction.wallet?.restaurant?.ownerId === req.userId;
+    const isOrderParticipant =
+      transaction.order?.userId === req.userId ||
+      transaction.order?.riderId === req.userId ||
+      transaction.order?.restaurant.ownerId === req.userId;
+    if (!isAdmin && !isWalletOwner && !isOrderParticipant) {
       res.status(404).json({ success: false, message: 'Transaction not found' });
       return;
     }
@@ -120,32 +149,62 @@ clickPesaWebhookRouter.post('/webhook', verifyClickPesaWebhook, async (req: any,
     }
 
     if (event === 'PAYMENT RECEIVED' && data.status === 'SUCCESS') {
-      if (transaction.status !== 'SUCCESSFUL') {
-        await prisma.transaction.update({
-          where: { id: transaction.id },
-          data: { status: 'SUCCESSFUL' },
+      await prisma.$transaction(async (tx) => {
+        const claimed = await tx.transaction.updateMany({
+          where: { id: transaction.id, status: TransactionStatus.PENDING },
+          data: { status: TransactionStatus.SUCCESSFUL },
         });
+        if (claimed.count !== 1) return;
+
+        if (transaction.type === 'TOP_UP') {
+          const amountInCents = Math.round(transaction.amount * 100);
+          if (
+            !transaction.walletId ||
+            !Number.isSafeInteger(amountInCents) ||
+            amountInCents <= 0 ||
+            amountInCents > MAX_WALLET_AMOUNT
+          ) {
+            throw new Error('Wallet top-up transaction is invalid');
+          }
+
+          const credited = await tx.wallet.updateMany({
+            where: {
+              id: transaction.walletId,
+              status: 'ACTIVE',
+              balance: { lte: MAX_WALLET_AMOUNT - amountInCents },
+            },
+            data: { balance: { increment: amountInCents } },
+          });
+          if (credited.count !== 1) throw new Error('Unable to credit wallet top-up');
+
+          await tx.ledgerEntry.create({
+            data: {
+              transactionId: transaction.id,
+              walletId: transaction.walletId,
+              amount: amountInCents,
+              direction: EntryDirection.CREDIT,
+            },
+          });
+        }
 
         if (transaction.orderId) {
-          await prisma.order.update({
+          await tx.order.update({
             where: { id: transaction.orderId },
             data: { paymentIntentId: transaction.id },
           });
         }
-      }
+      });
     } else if (event === 'PAYMENT FAILED') {
-      if (transaction.status !== 'FAILED') {
-        await prisma.transaction.update({
-          where: { id: transaction.id },
-          data: { status: 'FAILED' },
-        });
-      }
+      await prisma.transaction.updateMany({
+        where: { id: transaction.id, status: TransactionStatus.PENDING },
+        data: { status: TransactionStatus.FAILED },
+      });
     }
 
     res.status(200).json({ success: true, message: 'Webhook processed' });
   } catch (error) {
     console.error('Webhook processing error:', error);
-    res.status(200).json({ success: true, message: 'Webhook acknowledged' });
+    res.status(500).json({ success: false, message: 'Webhook processing failed' });
   }
 });
 

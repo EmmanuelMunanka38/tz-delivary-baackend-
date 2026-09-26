@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==========================================
+// ENUMS
+// ==========================================
+
 enum UserRole {
   customer
   restaurant_owner
@@ -44,32 +48,94 @@ enum DeliveryRequestStatus {
   cancelled
 }
 
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+}
+
+enum SubscriptionStatus {
+  PAID
+  UNPAID
+  CANCELLED
+}
+
+enum WhatsAppConversationState {
+  MAIN_MENU
+  BROWSE_RESTAURANTS
+  VIEW_MENU
+  VIEW_CART
+  CHECKOUT_ADDRESS
+  CHECKOUT_PAYMENT
+  ORDER_CONFIRMATION
+  ORDER_TRACKING
+  RESERVATION
+}
+
+enum WalletStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum WalletOwnerType {
+  DRIVER
+  RESTAURANT_OWNER
+  PLATFORM
+}
+
+enum WalletTransactionType {
+  ORDER_PAYMENT
+  DELIVERY_EARNING
+  WITHDRAWAL
+  PLATFORM_FEE
+  REFUND
+  TOP_UP
+}
+
+enum EntryDirection {
+  CREDIT // Money flowing IN
+  DEBIT  // Money flowing OUT
+}
+
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ==========================================
+// USER & CORE MODELS
+// ==========================================
+
 model User {
-  id                   String    @id @default(uuid())
-  phone                String?   @unique
-  name                 String    @default("")
-  email                String?   @unique
-  avatar               String?
-  role                 UserRole  @default(customer)
-  otpCode              String?
-  otpExpiresAt         DateTime?
-  fcmToken             String?
-  refreshToken         String?
-  clickPesaPhone       String?
-  hasUsedFreeTrial     Boolean   @default(false)
-  whatsappPhoneNumber  String?   @unique
-  whatsappOptIn        Boolean   @default(false)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  phone               String?   @unique
+  name                String    @default("")
+  email               String?   @unique
+  avatar              String?
+  role                UserRole  @default(customer)
+  otpCode             String?
+  otpExpiresAt        DateTime?
+  fcmToken            String?
+  refreshToken        String?
+  clickPesaPhone      String?
+  hasUsedFreeTrial    Boolean   @default(false)
+  whatsappPhoneNumber String?   @unique
+  whatsappOptIn       Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   ownedRestaurants Restaurant[]
   orders           Order[]
-  riderOrders      Order[]          @relation("RiderOrders")
+  riderOrders      Order[]             @relation("RiderOrders")
   cart             Cart?
   deliveryRequests DeliveryRequest[]
   notifications    Notification[]
   subscriptions    UserSubscription[]
   whatsappSessions WhatsAppSession[]
+  wallet           Wallet?             // Wallet relation for Driver/User
 
   @@index([phone])
   @@index([email])
@@ -84,33 +150,34 @@ model Category {
 }
 
 model Restaurant {
-  id           String   @id @default(uuid())
-  name         String
-  image        String
-  logo         String?
-  cuisine      String
-  rating       Float    @default(0)
-  ratingCount  Int      @default(0)
-  deliveryFee  Float
-  deliveryTime String
-  distance     String
-  address      String
-  isOpen         Boolean  @default(true)
-  isApproved     Boolean  @default(true)
-  openingHours   String?
-  closingHours   String?
-  customMessage  String?
-  nextOpenTime   String?
-  categories     Json     @default("[]")
-  latitude       Float?
-  longitude      Float?
-  ownerId        String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(uuid())
+  name          String
+  image         String
+  logo          String?
+  cuisine       String
+  rating        Float    @default(0)
+  ratingCount   Int      @default(0)
+  deliveryFee   Float
+  deliveryTime  String
+  distance      String
+  address       String
+  isOpen        Boolean  @default(true)
+  isApproved    Boolean  @default(true)
+  openingHours  String?
+  closingHours  String?
+  customMessage String?
+  nextOpenTime  String?
+  categories    Json     @default("[]")
+  latitude      Float?
+  longitude     Float?
+  ownerId       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  owner      User         @relation(fields: [ownerId], references: [id])
+  owner      User        @relation(fields: [ownerId], references: [id])
   orders     Order[]
   promotions Promotion[]
+  wallet     Wallet?     // Wallet relation for Restaurant
 
   @@index([ownerId])
   @@index([cuisine])
@@ -136,17 +203,17 @@ model Promotion {
 }
 
 model MenuItem {
-  id            String   @id @default(uuid())
-  restaurantId  String
-  name          String
-  description   String
-  price         Float
-  image         String?
-  category      String
-  isAvailable   Boolean  @default(true)
-  isPopular     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  restaurantId String
+  name         String
+  description  String
+  price        Float
+  image        String?
+  category     String
+  isAvailable  Boolean  @default(true)
+  isPopular    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([restaurantId])
   @@index([category])
@@ -160,8 +227,8 @@ model Cart {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user       User  @relation(fields: [userId], references: [id])
-  items      CartItem[]
+  user  User       @relation(fields: [userId], references: [id])
+  items CartItem[]
 
   @@index([userId])
 }
@@ -198,10 +265,10 @@ model Order {
   paymentIntentId   String?
   createdAt         DateTime      @default(now())
 
-  user       User       @relation(fields: [userId], references: [id])
-  rider      User?      @relation("RiderOrders", fields: [riderId], references: [id])
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
-  items      OrderItem[]
+  user         User          @relation(fields: [userId], references: [id])
+  rider        User?         @relation("RiderOrders", fields: [riderId], references: [id])
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id])
+  items        OrderItem[]
   transactions Transaction[]
 
   @@index([userId])
@@ -212,13 +279,13 @@ model Order {
 }
 
 model OrderItem {
-  id                 String  @id @default(uuid())
-  orderId            String
-  menuItemId         String
-  name               String
-  price              Float
-  quantity           Int
-  image              String?
+  id                  String  @id @default(uuid())
+  orderId             String
+  menuItemId          String
+  name                String
+  price               Float
+  quantity            Int
+  image               String?
   specialInstructions String?
 
   order Order @relation(fields: [orderId], references: [id])
@@ -273,31 +340,9 @@ model Notification {
   @@index([read])
 }
 
-enum TransactionStatus {
-  PENDING
-  SUCCESSFUL
-  FAILED
-}
-
-model Transaction {
-  id              String            @id @default(uuid())
-  orderReference  String            @unique
-  orderId         String?
-  clickPesaId     String?
-  amount          Float
-  phoneNumber     String
-  status          TransactionStatus @default(PENDING)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  order Order? @relation(fields: [orderId], references: [id])
-}
-
-enum SubscriptionStatus {
-  PAID
-  UNPAID 
-  CANCELLED
-}
+// ==========================================
+// SUBSCRIPTION MODELS
+// ==========================================
 
 model SubscriptionPlan {
   id                  String             @id @default(uuid())
@@ -343,28 +388,20 @@ model UserSubscription {
   @@index([trialEndsAt])
 }
 
-enum WhatsAppConversationState {
-  MAIN_MENU
-  BROWSE_RESTAURANTS
-  VIEW_MENU
-  VIEW_CART
-  CHECKOUT_ADDRESS
-  CHECKOUT_PAYMENT
-  ORDER_CONFIRMATION
-  ORDER_TRACKING
-  RESERVATION
-}
+// ==========================================
+// WHATSAPP INTEGRATION
+// ==========================================
 
 model WhatsAppSession {
-  id                String                  @id @default(uuid())
+  id                String                    @id @default(uuid())
   userId            String
-  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phoneNumber       String                  @unique
+  user              User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber       String                    @unique
   conversationState WhatsAppConversationState @default(MAIN_MENU)
-  stateData         Json                    @default("{}")
-  lastMessageAt     DateTime                @default(now())
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  stateData         Json                      @default("{}")
+  lastMessageAt     DateTime                  @default(now())
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   messages WhatsAppMessage[]
 
@@ -386,4 +423,115 @@ model WhatsAppMessage {
 
   @@index([sessionId])
   @@index([whatsappMessageId])
+}
+
+// ==========================================
+// WALLET & LEDGER SYSTEM (FINANCIAL ENGINE)
+// ==========================================
+
+model Wallet {
+  id           String          @id @default(uuid())
+  status       WalletStatus    @default(ACTIVE)
+  ownerType    WalletOwnerType
+  currency     String          @default("TZS")
+  
+  // Balance stored in integer units (e.g., TZS amount without floating point errors)
+  balance      Int             @default(0)
+
+  // One-to-one owner relations
+  restaurantId String?         @unique
+  driverId     String?         @unique
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Relations
+  restaurant          Restaurant?          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  driver              User?                @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  ledgerEntries       LedgerEntry[]
+  mobileMoneyAccounts MobileMoneyAccount[]
+  withdrawals         WithdrawalRequest[]
+  transactions        Transaction[]
+
+  @@index([restaurantId])
+  @@index([driverId])
+}
+
+model Transaction {
+  id             String                 @id @default(uuid())
+  orderReference String                 @unique
+  idempotencyKey String?                @unique
+  orderId        String?
+  walletId       String?
+  clickPesaId    String?
+  amount         Float
+  phoneNumber    String
+  type           WalletTransactionType? @default(ORDER_PAYMENT)
+  status         TransactionStatus      @default(PENDING)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  order             Order?             @relation(fields: [orderId], references: [id])
+  wallet            Wallet?            @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  ledgerEntries     LedgerEntry[]
+  withdrawalRequest WithdrawalRequest?
+
+  @@index([orderId])
+  @@index([walletId])
+  @@index([status])
+}
+
+model LedgerEntry {
+  id            String         @id @default(uuid())
+  transactionId String
+  walletId      String
+  amount        Int            // Always positive
+  direction     EntryDirection
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  wallet      Wallet      @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@index([walletId])
+  @@index([transactionId])
+}
+
+model MobileMoneyAccount {
+  id          String        @id @default(uuid())
+  walletId    String
+  provider    PaymentMethod // M-Pesa, Tigo Pesa, Airtel Money, HaloPesa, etc.
+  phoneNumber String        // E.g., "+255712345678"
+  accountName String        // Registered name on SIM card for validation
+  isPrimary   Boolean       @default(true)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  wallet      Wallet              @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  withdrawals WithdrawalRequest[]
+
+  @@index([walletId])
+}
+
+model WithdrawalRequest {
+  id                   String           @id @default(uuid())
+  walletId             String
+  mobileMoneyAccountId String
+  transactionId        String?          @unique
+  amount               Int              // Amount requested for payout in integer
+  fee                  Int              @default(0)
+  status               WithdrawalStatus @default(PENDING)
+  externalReference    String?          // ClickPesa or Mobile Money Payout ID
+  failureReason        String?
+
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  wallet             Wallet             @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  mobileMoneyAccount MobileMoneyAccount @relation(fields: [mobileMoneyAccountId], references: [id], onDelete: Restrict)
+  transaction        Transaction?       @relation(fields: [transactionId], references: [id])
+
+  @@index([walletId, status])
 }

@@ -1,0 +1,20 @@
+//for completed tasks just write complete inside [] eg ..[completed]
+
+TASKS
+Task 1 .Implementing wallets api routes ,services and controller and testing .[]
+Task 2 .Ensuring all the transaction apis are up and complete running these include 
+
+-collection api []
+-disbursment api []
+-wallets functionality []
+-wallet security []
+
+Task 3 .Finishing with the Whatsapp intergration and flow json ui []
+
+NOTE: The challange that makes not to push the application to playstore is the Mobile money part 
+and wallet handling since they are the most important areas of the application 
+
+What to do fast : 
+- pay the 100K tsh for snippe Api 
+- Subscribe to opencode and being to cook the 
+app .

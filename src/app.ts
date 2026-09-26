@@ -26,6 +26,7 @@ import subscriptionRoutes, { clickPesaSubscriptionWebhookRouter } from './routes
 import contactRoutes from './routes/contact';
 import whatsappRoutes from './routes/whatsapp';
 import whatsappFlowRoutes from './routes/whatsapp-flow';
+import walletRoutes from './routes/wallet';
 
 const app = express();
 
@@ -65,9 +66,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
-
 // 1. UNTHROTTLED OPERATIONAL & WEBHOOK ROUTES (Must be BEFORE rate limiters)
-
 
 // Webhooks
 app.use('/api/payments', clickPesaWebhookRouter);
@@ -108,16 +107,12 @@ app.get('/api/debug/ip', (req, res) => {
   });
 });
 
-
 // 2. RATE LIMITERS (Applied only to business API endpoints)
-
 
 app.use(globalLimiter);
 app.use('/api/', publicLimiter);
 
-
 // 3. PROTECTED API ROUTES
-
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -134,6 +129,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/whatsapp/flow', whatsappFlowRoutes);
+app.use('/api/wallet', walletRoutes);
 
 // 404 handler
 app.use((_req, res) => {
