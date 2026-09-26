@@ -1,5 +1,4 @@
 import Redis from 'ioredis';
-import { Redis as UpstashRedis } from '@upstash/redis';
 import config from '../config';
 
 /**
@@ -18,7 +17,7 @@ const getTlsOptions = (url: string): Record<string, unknown> | undefined => {
 
 /**
  * ioredis client — used by BullMQ, Socket.IO adapter, and rate limiter store.
- * Connects to Upstash/LayerBase Redis via TLS in production, or a local Redis in dev.
+ * Connects to the configured Redis service (Railway in production, local Redis in dev).
  */
 export const redis = new Redis(config.redis.url, {
   maxRetriesPerRequest: null,
@@ -35,21 +34,29 @@ redis.on('connect', () => {
 });
 
 /**
- * Upstash REST client — used by rate-limit-redis for distributed rate limiting.
- * Works over HTTP so it doesn't need a persistent TCP connection.
- * Falls back to a no-op when credentials are not configured (local dev).
- */
-export const upstashRedis =
-  config.upstash.redisRestUrl && config.upstash.redisRestToken
-    ? new UpstashRedis({
-        url: config.upstash.redisRestUrl,
-        token: config.upstash.redisRestToken,
-      })
-    : null;
-
-/**
  * Gracefully close all Redis connections (called during server shutdown).
  */
 export const closeRedis = async (): Promise<void> => {
-  await redis.quit();
+  if (redis.status === 'end') return;
+  let timeout: NodeJS.Timeout | undefined;
+
+  try {
+    await Promise.race([
+      redis.quit(),
+      new Promise<never>((_, reject) =>
+        (timeout = setTimeout(
+          () => reject(new Error('Redis shutdown timed out')),
+          2_000,
+        )),
+      ),
+    ]);
+  } catch (error) {
+    console.warn(
+      '[Redis] Graceful shutdown failed; closing the connection:',
+      error instanceof Error ? error.message : error,
+    );
+    redis.disconnect();
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 };

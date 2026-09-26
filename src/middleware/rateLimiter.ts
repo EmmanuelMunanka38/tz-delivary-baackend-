@@ -1,4 +1,4 @@
-import rateLimit, { type Options } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
 import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { Request } from 'express';
 import { redis } from '../db/redis';
@@ -22,7 +22,7 @@ const getClientIp = (req: Request): string => {
  * Composite key (IP + Email) prevents brute-forcing while avoiding total IP lockout.
  */
 const getAuthKey = (req: Request): string => {
-  const ip = getClientIp(req);
+  const ip = ipKeyGenerator(getClientIp(req));
   const email =
     typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   return email ? `ip:${ip}:email:${email}` : `ip:${ip}`;
@@ -38,22 +38,7 @@ const makeStore = (prefix: string) =>
       command: string,
       ...args: string[]
     ): Promise<RedisReply> => {
-      const cmd = command.toUpperCase();
-      try {
-        return (await redis.call(command, ...args)) as RedisReply;
-      } catch (err) {
-        console.error(`[RateLimiter] Redis error (${cmd}):`, err);
-        
-        // SCRIPT LOAD expects a 40-char SHA string
-        if (cmd === 'SCRIPT') {
-          return '0000000000000000000000000000000000000000' as unknown as RedisReply;
-        }
-        // EVALSHA / EVAL expect [totalHits, timeToExpireMs]
-        if (cmd === 'EVALSHA' || cmd === 'EVAL') {
-          return [0, 60_000] as unknown as RedisReply;
-        }
-        return 0 as unknown as RedisReply;
-      }
+      return (await redis.call(command, ...args)) as RedisReply;
     },
   });
 
@@ -74,7 +59,7 @@ export const globalLimiter = rateLimit({
   store: makeStore('global'),
   windowMs: 1_000,
   max: 100,
-  keyGenerator: getClientIp,
+  keyGenerator: (req) => ipKeyGenerator(getClientIp(req)),
   message: {
     success: false,
     message: 'Too many requests from this IP. Please slow down.',
@@ -89,7 +74,7 @@ export const publicLimiter = rateLimit({
   store: makeStore('public'),
   windowMs: 60 * 1_000,
   max: 300,
-  keyGenerator: getClientIp,
+  keyGenerator: (req) => ipKeyGenerator(getClientIp(req)),
   message: {
     success: false,
     message: 'Rate limit exceeded. Try again shortly.',
@@ -104,7 +89,7 @@ export const openEndpointLimiter = rateLimit({
   store: makeStore('open'),
   windowMs: 60 * 1_000,
   max: 60,
-  keyGenerator: getClientIp,
+  keyGenerator: (req) => ipKeyGenerator(getClientIp(req)),
   message: {
     success: false,
     message: 'Too many requests for this resource.',

@@ -145,7 +145,7 @@ If you want, proceed to apply these changes (create commits, run tests) and open
    - `openEndpointLimiter` adds another 60 requests per IP per 60 seconds on restaurants, categories, and promotions.
    - `/api/health`, `/api/metrics`, and `/api/debug/ip` are all behind both the global and public limiters. A load-balancer health check, uptime monitor, proxy retry loop, browser polling loop, or mobile-app retry loop is therefore counted as traffic even when there are no human users.
    - The Redis prefixes are shared (`rl:global:`, `rl:public:`, `rl:open:`, `rl:auth:`, and `rl:otp:`). This is correct for three replicas: all replicas must see one aggregate counter. It also means that a request burst through any replica consumes the same bucket, and that old counters remain visible if the same Redis database and prefixes are reused by another deployment/environment.
-   - The rate limiter uses the ioredis TCP client from `src/db/redis.ts`; the `upstashRedis` REST client is not passed to `RedisStore` and is not used by the rate limiter. The comments and `.env.example` describe Upstash REST as the distributed rate-limiter path, but the implementation actually requires a working `REDIS_URL` TCP connection.
+   - The rate limiter uses the configured `REDIS_URL` through the shared ioredis TCP client in `src/db/redis.ts`. Production should configure this as the Railway Redis service URL; the Railway private hostname is only reachable from services running on Railway. Rate-limit store errors are passed through `express-rate-limit`'s `passOnStoreError` fail-open behavior rather than fabricated Redis script results.
 
    **Most likely causes of the false-looking 429:**
 
