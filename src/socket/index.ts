@@ -23,21 +23,7 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
     pingTimeout: 5000,
   });
 
-  // Redis adapter — enables Socket.IO to work across multiple server instances
-  const tlsOpts = config.redis.url.startsWith('rediss://')
-    ? (() => { try { return { servername: new URL(config.redis.url).hostname }; } catch { return {}; } })()
-    : undefined;
-  const pubClient = new Redis(config.redis.url, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    tls: tlsOpts,
-  });
-  const subClient = pubClient.duplicate();
-
-  pubClient.on('error', (err) => console.error('[Socket.IO Redis] pub error:', err.message));
-  subClient.on('error', (err) => console.error('[Socket.IO Redis] sub error:', err.message));
-
-  io.adapter(createAdapter(pubClient, subClient));
+  void configureRedisAdapter(io);
 
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {
@@ -101,6 +87,42 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
   });
 
   return io;
+};
+
+const configureRedisAdapter = async (socketServer: Server): Promise<void> => {
+  const tlsOpts = config.redis.url.startsWith('rediss://')
+    ? (() => {
+        try {
+          return { servername: new URL(config.redis.url).hostname };
+        } catch {
+          return {};
+        }
+      })()
+    : undefined;
+  const redisOptions = {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    connectTimeout: 5_000,
+    retryStrategy: (times: number) => (times <= 2 ? times * 250 : null),
+    tls: tlsOpts,
+  };
+  const pubClient = new Redis(config.redis.url, redisOptions);
+  const subClient = pubClient.duplicate();
+
+  pubClient.on('error', (err) => console.error('[Socket.IO Redis] pub error:', err.message));
+  subClient.on('error', (err) => console.error('[Socket.IO Redis] sub error:', err.message));
+
+  try {
+    await Promise.all([pubClient.ping(), subClient.ping()]);
+    socketServer.adapter(createAdapter(pubClient, subClient));
+  } catch (error) {
+    console.warn(
+      '[Socket.IO Redis] unavailable; using the in-memory adapter:',
+      error instanceof Error ? error.message : error,
+    );
+    pubClient.disconnect();
+    subClient.disconnect();
+  }
 };
 
 export const getIO = (): Server => {
