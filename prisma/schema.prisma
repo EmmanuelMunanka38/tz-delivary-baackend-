@@ -451,6 +451,7 @@ model Wallet {
   ledgerEntries       LedgerEntry[]
   mobileMoneyAccounts MobileMoneyAccount[]
   withdrawals         WithdrawalRequest[]
+  transactions        Transaction[]
 
   @@index([restaurantId])
   @@index([driverId])
@@ -461,6 +462,7 @@ model Transaction {
   orderReference String                 @unique
   idempotencyKey String?                @unique
   orderId        String?
+  walletId       String?
   clickPesaId    String?
   amount         Float
   phoneNumber    String
@@ -470,10 +472,12 @@ model Transaction {
   updatedAt      DateTime               @updatedAt
 
   order             Order?             @relation(fields: [orderId], references: [id])
+  wallet            Wallet?            @relation(fields: [walletId], references: [id], onDelete: Restrict)
   ledgerEntries     LedgerEntry[]
   withdrawalRequest WithdrawalRequest?
 
   @@index([orderId])
+  @@index([walletId])
   @@index([status])
 }
 
