@@ -13,4 +13,3 @@ if (process.env.NODE_ENV !== 'production') {
 export default prisma;
 
 
-//! i dont get what line 3 means at all that is my opinion for real .
