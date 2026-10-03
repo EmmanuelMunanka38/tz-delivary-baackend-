@@ -1,7 +1,8 @@
 import { Queue, Worker, Job } from 'bullmq';
 import config from '../config';
 import prisma from '../db/prisma';
-import { sendPushNotification } from '../services/notification.service';
+import { sendPushNotification } from '../services/notification.service'; 
+
 
 const connection = { url: config.redis.url };
 
@@ -69,11 +70,11 @@ const orderWorker = new Worker('orders', async (job: Job) => {
             },
           });
         }
-
+        //? why sending notfications to all drivers while the resturant owner decide which driver to use .
         for (const driver of drivers) {
           if (driver.fcmToken) {
             await sendPushNotification(driver.id, 'New Delivery Available', `Order #${order.orderNumber} needs pickup`);
-          }
+          } // refactoring this code 
         }
       } catch (error) {
         console.error(`[Queue] Auto-assign error for ${orderId}:`, error);
