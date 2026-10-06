@@ -10,7 +10,7 @@ const config = {
   database: {
     url:
       process.env.DATABASE_URL ||
-      'postgresql://postgres:kNquOOwZPGMRBCgPGaNkWDLXMmkSwckm@acela.proxy.rlwy.net:34520/railway',
+      'postgresql://neondb_owner:npg_pkTWY5Da3hVI@ep-flat-tooth-aqzrujfq.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require',
   },
 
   jwt: {
