@@ -18,3 +18,13 @@ What to do fast :
 - pay the 100K tsh for snippe Api 
 - Subscribe to opencode and being to cook the 
 app .
+
+CODE FIXES ALGORITHM 
+
+The algo for assing the driver ;
+-> we need to get all iSactive and !busy drivers 
+-> filter and get the one's near the resturant to be on top 
+	of the rist + plus others below .
+-> display them to the resturant dashboard for them to be assinged an oder 
+	to deliver to the customer 
+

@@ -48,7 +48,7 @@ export async function whatsappFlowEncryption(
 
       req.whatsappFlow = {
         decryptedBody: req.body,
-        aesKeyBuffer: Buffer.alloc(0),
+        aesKeyBuffer: Buffer.alloc(0), 
         initialVectorBuffer: Buffer.alloc(0),
       };
 

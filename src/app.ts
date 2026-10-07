@@ -30,7 +30,7 @@ import walletRoutes from './routes/wallet';
 
 const app = express();
 
-// Trust proxies across multi-hop setup (Cloudflare -> pikifood-proxy -> Render LB)
+// Trust proxies across multi-hop setup (Cloudflare -> pikifood-proxy -> Railway LB)
 app.set('trust proxy', true);
 
 // Security & Standard Middleware

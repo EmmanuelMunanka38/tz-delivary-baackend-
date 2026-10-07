@@ -24,55 +24,55 @@ This document outlines the phased implementation plan for integrating WhatsApp B
          ▼
 ┌─────────────────────────────────────────┐
 │  Piki Food Backend                      │
-│  ┌──────────────────────────────────┐  │
-│  │ WhatsApp Webhook Endpoint        │  │
-│  │ POST /api/whatsapp/webhook       │  │
-│  └──────────┬───────────────────────┘  │
+│  ┌──────────────────────────────────┐   │
+│  │ WhatsApp Webhook Endpoint        │   │
+│  │ POST /api/whatsapp/webhook       │   │
+│  └──────────┬───────────────────────┘   │
 │             │                           │
 │             ▼                           │
-│  ┌──────────────────────────────────┐  │
-│  │ WhatsApp Message Service         │  │
-│  │ - Parse incoming messages        │  │
-│  │ - Manage conversation state      │  │
-│  │ - Route to appropriate handler   │  │
-│  └──────────┬───────────────────────┘  │
+│  ┌──────────────────────────────────┐   │
+│  │ WhatsApp Message Service         │   │
+│  │ - Parse incoming messages        │   │
+│  │ - Manage conversation state      │   │
+│  │ - Route to appropriate handler   │   │
+│  └──────────┬───────────────────────┘   │
 │             │                           │
 │             ├──────────────────┐        │
 │             │                  │        │
 │             ▼                  ▼        │
-│  ┌──────────────────┐  ┌────────────┐  │
-│  │ Session Manager  │  │ User Auto- │  │
-│  │ (Redis)          │  │ Register   │  │
-│  └────────┬─────────┘  └────────────┘  │
+│  ┌──────────────────┐  ┌────────────┐   │
+│  │ Session Manager  │  │ User Auto- │   │
+│  │ (Redis)          │  │ Register   │   │ 
+│  └────────┬─────────┘  └────────────┘   │
 │           │                             │
 │           ▼                             │
-│  ┌──────────────────────────────────┐  │
-│  │ Conversation Flow Handlers       │  │
-│  │ - Browse Restaurants             │  │
-│  │ - View Menu                      │  │
-│  │ - Add to Cart                    │  │
-│  │ - Checkout & Payment             │  │
-│  │ - Order Tracking                 │  │
-│  │ - Reservations (future)          │  │
-│  └──────────┬───────────────────────┘  │
+│  ┌──────────────────────────────────┐   │
+│  │ Conversation Flow Handlers       │   │
+│  │ - Browse Restaurants             │   │
+│  │ - View Menu                      │   │
+│  │ - Add to Cart                    │   │
+│  │ - Checkout & Payment             │   │
+│  │ - Order Tracking                 │   │
+│  │ - Reservations (future)          │   │
+│  └──────────┬───────────────────────┘   │
 │             │                           │
 │             ▼                           │
-│  ┌──────────────────────────────────┐  │
-│  │ Existing Services                │  │
-│  │ - Restaurant Service             │  │
-│  │ - Order Service                  │  │
-│  │ - Cart Service                   │  │
-│  │ - Payment Service (ClickPesa)    │  │
-│  │ - Notification Service           │  │
-│  └──────────┬───────────────────────┘  │
+│  ┌──────────────────────────────────┐   │
+│  │ Existing Services                │   │ 
+│  │ - Restaurant Service             │   │
+│  │ - Order Service                  │   │
+│  │ - Cart Service                   │   │
+│  │ - Payment Service (ClickPesa)    │   │
+│  │ - Notification Service           │   │
+│  └──────────┬───────────────────────┘   │
 │             │                           │
 │             ▼                           │
-│  ┌──────────────────────────────────┐  │
-│  │ Uber Direct Service (Phase 3)    │  │
-│  │ - Create delivery requests       │  │
-│  │ - Track delivery status          │  │
-│  │ - Webhook handling               │  │
-│  └──────────────────────────────────┘  │
+│  ┌──────────────────────────────────┐   │
+│  │ Uber Direct Service (Phase 3)    │   │
+│  │ - Create delivery requests       │   │
+│  │ - Track delivery status          │   │
+│  │ - Webhook handling               │   │
+│  └──────────────────────────────────┘   │
 └─────────────────────────────────────────┘
 ```
 
