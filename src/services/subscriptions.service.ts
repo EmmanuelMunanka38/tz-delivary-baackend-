@@ -1,8 +1,6 @@
-import axios from 'axios';
 import { Decimal } from '@prisma/client/runtime/library';
 import prisma from '@/db/prisma';
-import config from '@/config';
-import { getClickPesaToken, createPayloadChecksum } from '@/services/payment.service';
+import { initiateUSSDPush } from '@/services/payment.service';
 import { sendSubscriptionConfirmationEmail } from '@/services/email.service';
 import { SubscriptionStatus } from '@prisma/client';
 
@@ -222,23 +220,11 @@ export async function upgradeFromTrial(userId: string, input: CreateSubscription
   const subscriptionReference = `SUB${Date.now().toString()}${Math.floor(Math.random() * 1000)}`;
   const amount = plan.priceCents / 100;
 
-  const token = await getClickPesaToken();
-
-  const requestBody: Record<string, any> = {
-    amount: String(amount),
+  const clickPesa = await initiateUSSDPush({
+    amount,
     currency: 'TZS',
     orderReference: subscriptionReference,
     phoneNumber: input.phoneNumber,
-    priceId: plan.ClickpesaPriceId,
-    interval: plan.billingInterval,
-  };
-  requestBody.checksum = createPayloadChecksum(requestBody);
-
-  const clickPesaResponse = await axios.post(`${config.clickPesa.baseUrl}/subscriptions`, requestBody, {
-    headers: {
-      Authorization: token,
-      'Content-Type': 'application/json',
-    },
   });
 
   await prisma.userSubscription.update({
@@ -263,7 +249,7 @@ export async function upgradeFromTrial(userId: string, input: CreateSubscription
     include: { plan: true },
   });
 
-  return { subscription, clickPesa: clickPesaResponse.data };
+  return { subscription, clickPesa };
 }
 
 export async function createSubscription(userId: string, input: CreateSubscriptionInput) {
@@ -280,23 +266,11 @@ export async function createSubscription(userId: string, input: CreateSubscripti
   const subscriptionReference = `SUB${Date.now().toString()}${Math.floor(Math.random() * 1000)}`;
   const amount = plan.priceCents / 100;
 
-  const token = await getClickPesaToken();
-
-  const requestBody: Record<string, any> = {
-    amount: String(amount),
+  const clickPesa = await initiateUSSDPush({
+    amount,
     currency: 'TZS',
     orderReference: subscriptionReference,
     phoneNumber: input.phoneNumber,
-    priceId: plan.ClickpesaPriceId,
-    interval: plan.billingInterval,
-  };
-  requestBody.checksum = createPayloadChecksum(requestBody);
-
-  const clickPesaResponse = await axios.post(`${config.clickPesa.baseUrl}/subscriptions`, requestBody, {
-    headers: {
-      Authorization: token,
-      'Content-Type': 'application/json',
-    },
   });
 
   const subscription = await prisma.userSubscription.create({
@@ -313,7 +287,7 @@ export async function createSubscription(userId: string, input: CreateSubscripti
     include: { plan: true },
   });
 
-  return { subscription, clickPesa: clickPesaResponse.data };
+  return { subscription, clickPesa };
 }
 
 export async function cancelSubscription(userId: string, subscriptionId: string) {
@@ -324,19 +298,6 @@ export async function cancelSubscription(userId: string, subscriptionId: string)
   if (subscription.userId !== userId) {
     throw new Error('Not authorized to cancel this subscription');
   }
-
-  await axios
-    .post(
-      `${config.clickPesa.baseUrl}/subscriptions/${subscription.stripeSubscriptionId}/cancel`,
-      {},
-      {
-        headers: {
-          Authorization: await getClickPesaToken(),
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-    .catch(() => undefined);
 
   return prisma.userSubscription.update({
     where: { id: subscriptionId },
